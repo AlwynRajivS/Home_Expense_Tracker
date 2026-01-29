@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 <head>
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -68,15 +68,6 @@ th,td{
 }
 th{background:#f0f0f0}
 
-.action-btn{
-  padding:6px 10px;
-  font-size:11px;
-  border-radius:6px;
-  color:#fff;
-  border:none;
-}
-.del{background:#e53935}
-
 h3{
   text-align:center;
   margin-top:15px;
@@ -105,6 +96,14 @@ h3{
     <div class="box">Cash ₹<span id="cash">0</span></div>
     <div class="box">Online ₹<span id="online">0</span></div>
   </div>
+
+  <!-- ===== NEW: PREVIOUS MONTH CLOSING BALANCE ===== -->
+  <h3>Previous Month Closing Balance</h3>
+  <div class="cards">
+    <div class="box">Cash ₹<span id="prevCash">0</span></div>
+    <div class="box">Bank ₹<span id="prevBank">0</span></div>
+  </div>
+  <!-- ===== END NEW ===== -->
 
   <h3>Month-wise Income vs Expense</h3>
   <div class="chart-wrap">
@@ -165,10 +164,7 @@ h3{
 
 <!-- ================= PDF ================= -->
 <div class="box">
-<h3>Monthly PDF Report</h3>
-<label>Select Month (YYYY-MM)</label>
-<input id="pdfMonth" placeholder="2026-01">
-<button onclick="downloadMonthlyPDF()">📄 Download Monthly PDF</button>
+<button onclick="downloadPDF()">📄 Download PDF</button>
 </div>
 
 </div>
@@ -218,13 +214,11 @@ function loadCats(){
  .then(r=>r.json())
  .then(d=>{
    cat.innerHTML="";
-   d.categories.forEach(c=>{
-     cat.innerHTML+=`<option>${c}</option>`;
-   });
+   d.categories.forEach(c=>cat.innerHTML+=`<option>${c}</option>`);
  });
 }
 
-/* ---------- SAVE (UNCHANGED) ---------- */
+/* ---------- SAVE ---------- */
 function save(){
  fetch(API,{
    method:"POST",
@@ -250,17 +244,23 @@ function loadAll(){
  loadDashboard();
  loadMonthlyChart();
  loadTable();
+
+ // update balances for selected date range
+ fetch(`${API}?balances=1&from=${from.value}&to=${to.value}`)
+ .then(r=>r.json())
+ .then(b=>{
+   cash.innerText=b.cash;
+   online.innerText=b.bank;
+ });
 }
 
-/* ---------- DASHBOARD + PIE ---------- */
+/* ---------- DASHBOARD ---------- */
 function loadDashboard(){
  fetch(`${API}?dashboard=1&from=${from.value}&to=${to.value}`)
  .then(r=>r.json())
  .then(d=>{
    inc.innerText=d.inc;
    exp.innerText=d.exp;
-   cash.innerText=d.cash;
-   online.innerText=d.online;
 
    if(pieChartObj) pieChartObj.destroy();
    pieChartObj = new Chart(pieChart,{
@@ -294,12 +294,12 @@ function loadMonthlyChart(){
  });
 }
 
-/* ---------- TABLE + DELETE ---------- */
+/* ---------- TABLE ---------- */
 function loadTable(){
  fetch(`${API}?transactions=1&from=${from.value}&to=${to.value}`)
  .then(r=>r.json())
  .then(d=>{
-   let h='<tr><th>Date</th><th>User</th><th>Type</th><th>Category</th><th>Mode</th><th>Amount</th><th>Action</th></tr>';
+   let h='<tr><th>Date</th><th>User</th><th>Type</th><th>Category</th><th>Mode</th><th>Amount</th></tr>';
    d.data.forEach(r=>{
      h+=`<tr>
        <td>${r[0].split("T")[0]}</td>
@@ -308,34 +308,38 @@ function loadTable(){
        <td>${r[5]||"-"}</td>
        <td>${r[7]}</td>
        <td>₹${r[6]}</td>
-       <td>
-         <button class="action-btn del" onclick="del(${r[9]})">Delete</button>
-       </td>
      </tr>`;
    });
    txTable.innerHTML=h;
  });
 }
 
-function del(row){
- if(confirm("Delete this transaction?")){
-   fetch(API,{
-     method:"POST",
-     body:JSON.stringify({action:"delete",data:{row}})
-   }).then(loadAll);
- }
-}
-
-/* ---------- MONTHLY PDF ---------- */
-function downloadMonthlyPDF(){
- fetch(`${API}?monthlyPdf=1&month=${pdfMonth.value}`)
+/* ---------- PDF ---------- */
+function downloadPDF(){
+ if(!from.value||!to.value){alert("Select date range");return;}
+ fetch(`${API}?pdf=1&from=${from.value}&to=${to.value}`)
  .then(r=>r.json())
  .then(d=>window.open(d.url));
+}
+
+/* ---------- NEW: PREVIOUS MONTH CLOSING BALANCE ---------- */
+function loadPreviousMonthBalance(){
+ const now = new Date();
+ const lastDayPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+ const toDate = lastDayPrevMonth.toISOString().split("T")[0];
+
+ fetch(`${API}?balances=1&to=${toDate}`)
+ .then(r=>r.json())
+ .then(b=>{
+   prevCash.innerText = b.cash;
+   prevBank.innerText = b.bank;
+ });
 }
 
 /* ---------- INIT ---------- */
 loadCats();
 logic();
+loadPreviousMonthBalance();
 </script>
 
 </body>
