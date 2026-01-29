@@ -1,0 +1,199 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home Finance | Secure Login</title>
+
+<!-- Google Font -->
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+
+<style>
+/* ---------- RESET ---------- */
+*{
+  box-sizing:border-box;
+  font-family:'Poppins',sans-serif;
+}
+
+/* ---------- BACKGROUND ---------- */
+body{
+  margin:0;
+  height:100vh;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  background:
+    radial-gradient(circle at top left, #7f7fd5, transparent 40%),
+    radial-gradient(circle at bottom right, #91eae4, transparent 40%),
+    linear-gradient(135deg,#667eea,#764ba2);
+  overflow:hidden;
+}
+
+/* ---------- FLOATING SHAPES ---------- */
+.shape{
+  position:absolute;
+  border-radius:50%;
+  filter:blur(30px);
+  opacity:.6;
+  animation:float 8s infinite ease-in-out;
+}
+.shape.one{
+  width:220px;height:220px;
+  background:#ff9a9e;
+  top:10%;left:5%;
+}
+.shape.two{
+  width:180px;height:180px;
+  background:#fad0c4;
+  bottom:15%;right:10%;
+  animation-delay:2s;
+}
+.shape.three{
+  width:140px;height:140px;
+  background:#a18cd1;
+  bottom:5%;left:20%;
+  animation-delay:4s;
+}
+
+@keyframes float{
+  0%{transform:translateY(0)}
+  50%{transform:translateY(-30px)}
+  100%{transform:translateY(0)}
+}
+
+/* ---------- LOGIN CARD ---------- */
+.login-card{
+  position:relative;
+  width:90%;
+  max-width:380px;
+  padding:35px 30px;
+  border-radius:22px;
+  background:rgba(255,255,255,.25);
+  backdrop-filter:blur(15px);
+  box-shadow:0 25px 50px rgba(0,0,0,.35);
+  text-align:center;
+  animation:pop .7s ease;
+}
+
+/* ---------- TEXT ---------- */
+.login-card h1{
+  margin:0;
+  font-weight:600;
+  color:#fff;
+  letter-spacing:1px;
+}
+.login-card p{
+  margin:8px 0 25px;
+  font-size:14px;
+  color:#f1f1f1;
+}
+
+/* ---------- INPUT ---------- */
+.login-card input{
+  width:100%;
+  padding:14px;
+  margin-top:15px;
+  border-radius:12px;
+  border:none;
+  outline:none;
+  font-size:15px;
+  background:rgba(255,255,255,.85);
+  transition:all .3s ease;
+}
+.login-card input:focus{
+  transform:scale(1.03);
+  box-shadow:0 8px 20px rgba(0,0,0,.25);
+}
+
+/* ---------- BUTTON ---------- */
+.login-card button{
+  width:100%;
+  padding:14px;
+  margin-top:22px;
+  border-radius:14px;
+  border:none;
+  font-size:16px;
+  font-weight:600;
+  color:#fff;
+  cursor:pointer;
+  background:linear-gradient(135deg,#00c6ff,#0072ff);
+  box-shadow:0 10px 25px rgba(0,114,255,.45);
+  transition:all .3s ease;
+}
+.login-card button:hover{
+  transform:translateY(-2px);
+  box-shadow:0 15px 30px rgba(0,114,255,.6);
+}
+
+/* ---------- FOOTER ---------- */
+.hint{
+  margin-top:18px;
+  font-size:12px;
+  color:#eaeaea;
+  letter-spacing:.5px;
+}
+
+/* ---------- ANIMATION ---------- */
+@keyframes pop{
+  from{transform:scale(.85);opacity:0}
+  to{transform:scale(1);opacity:1}
+}
+</style>
+</head>
+
+<body>
+
+<!-- Floating background shapes -->
+<div class="shape one"></div>
+<div class="shape two"></div>
+<div class="shape three"></div>
+
+<!-- LOGIN CARD -->
+<div class="login-card">
+  <h1>🏠 Home Finance</h1>
+  <p>Smart • Secure • Family Expense Manager</p>
+
+  <input id="pin" type="password" placeholder="🔐 Enter Secure PIN">
+  <button onclick="login()">Sign In</button>
+
+  <div class="hint">Admin & User Access Enabled</div>
+</div>
+
+<script>
+/* ---------- CONFIG ---------- */
+const API = "https://script.google.com/macros/s/AKfycbxCmZhdadqBbMRQNUDNRhpEJ0IsuNnHZzoUCqizonj45B8s4h7pGuKVF0kNJGq-fcOvgA/exec";
+
+/* ---------- LOGIN ---------- */
+function login(){
+  if(!pin.value){
+    alert("Please enter PIN");
+    return;
+  }
+
+  fetch(API + "?login=" + pin.value)
+  .then(res => res.text())
+  .then(txt => {
+    let data;
+    try{ data = JSON.parse(txt); }
+    catch{
+      alert("Server error. Please try again.");
+      return;
+    }
+
+    if(!data.success){
+      alert("❌ Invalid PIN");
+      return;
+    }
+
+    // Save session
+    sessionStorage.setItem("user", JSON.stringify(data));
+
+    // Smooth redirect
+    document.body.style.opacity = 0;
+    setTimeout(()=>{ window.location.href="home.html"; },400);
+  });
+}
+</script>
+
+</body>
+</html>

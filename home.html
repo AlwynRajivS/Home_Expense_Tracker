@@ -1,0 +1,342 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Home Finance</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+body{
+  margin:0;
+  font-family:Segoe UI;
+  background:linear-gradient(135deg,#74ebd5,#ACB6E5)
+}
+.wrapper{
+  max-width:960px;
+  margin:auto;
+}
+.box{
+  background:#fff;
+  margin:12px;
+  padding:16px;
+  border-radius:18px;
+  box-shadow:0 8px 25px rgba(0,0,0,.2)
+}
+label{
+  font-size:13px;
+  font-weight:600;
+}
+input,select,button{
+  width:100%;
+  padding:12px;
+  margin-top:6px;
+  border-radius:10px;
+  border:1px solid #ccc;
+  box-sizing:border-box;
+}
+button{
+  background:linear-gradient(135deg,#667eea,#764ba2);
+  color:#fff;
+  font-weight:bold;
+}
+.hidden{display:none}
+
+.cards{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+}
+@media(max-width:600px){
+  .cards{grid-template-columns:1fr}
+}
+
+.chart-wrap{
+  width:100%;
+  overflow-x:auto;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  margin-top:10px;
+  font-size:12px;
+}
+th,td{
+  border:1px solid #ccc;
+  padding:6px;
+  text-align:center;
+}
+th{background:#f0f0f0}
+
+.action-btn{
+  padding:6px 10px;
+  font-size:11px;
+  border-radius:6px;
+  color:#fff;
+  border:none;
+}
+.del{background:#e53935}
+
+h3{
+  text-align:center;
+  margin-top:15px;
+}
+</style>
+</head>
+
+<body>
+<div class="wrapper">
+
+<!-- ================= DASHBOARD ================= -->
+<div class="box">
+  <h2 id="user"></h2>
+
+  <label>From</label>
+  <input type="date" id="from">
+
+  <label>To</label>
+  <input type="date" id="to">
+
+  <button onclick="loadAll()">View</button>
+
+  <div class="cards">
+    <div class="box">Income ₹<span id="inc">0</span></div>
+    <div class="box">Expense ₹<span id="exp">0</span></div>
+    <div class="box">Cash ₹<span id="cash">0</span></div>
+    <div class="box">Online ₹<span id="online">0</span></div>
+  </div>
+
+  <h3>Month-wise Income vs Expense</h3>
+  <div class="chart-wrap">
+    <canvas id="monthChart"></canvas>
+  </div>
+
+  <h3>Expense by Category</h3>
+  <div class="chart-wrap">
+    <canvas id="pieChart"></canvas>
+  </div>
+</div>
+
+<!-- ================= ADD TRANSACTION ================= -->
+<div class="box">
+<h3>Add Transaction</h3>
+
+<label>Date</label>
+<input type="date" id="date">
+
+<label>Type</label>
+<select id="type" onchange="logic()">
+  <option>Income</option>
+  <option>Expense</option>
+  <option>Transfer</option>
+</select>
+
+<label id="fromLbl" class="hidden">From</label>
+<select id="fromAcc" class="hidden">
+  <option>Cash</option>
+  <option>Bank</option>
+</select>
+
+<label id="toLbl" class="hidden">To</label>
+<select id="toAcc" class="hidden">
+  <option>Cash</option>
+  <option>Bank</option>
+</select>
+
+<label id="catLbl" class="hidden">Category</label>
+<select id="cat" class="hidden"></select>
+
+<label>Amount</label>
+<input id="amt" type="number">
+
+<label>Notes</label>
+<input id="note">
+
+<button onclick="save()">Save</button>
+</div>
+
+<!-- ================= TRANSACTIONS ================= -->
+<div class="box">
+<h3>Transactions</h3>
+<div style="overflow-x:auto">
+<table id="txTable"></table>
+</div>
+</div>
+
+<!-- ================= PDF ================= -->
+<div class="box">
+<h3>Monthly PDF Report</h3>
+<label>Select Month (YYYY-MM)</label>
+<input id="pdfMonth" placeholder="2026-01">
+<button onclick="downloadMonthlyPDF()">📄 Download Monthly PDF</button>
+</div>
+
+</div>
+
+<script>
+const API="https://script.google.com/macros/s/AKfycbzq96YLI7CyRk7nY8ETGSZyMm2lo5YsZjJWfDpRrexL6Z9jfQJTq2zdRjaIb3E7VnWQpw/exec";
+
+/* ---------- SESSION ---------- */
+const session = JSON.parse(sessionStorage.getItem("user")||"{}");
+if(!session.name) location.href="index.html";
+user.innerText="Welcome " + session.name;
+
+/* ---------- CHART OBJECTS ---------- */
+let monthChartObj = null;
+let pieChartObj = null;
+
+/* ---------- FIELD LOGIC (UNCHANGED) ---------- */
+function logic(){
+  fromAcc.classList.add("hidden");
+  toAcc.classList.add("hidden");
+  cat.classList.add("hidden");
+  fromLbl.classList.add("hidden");
+  toLbl.classList.add("hidden");
+  catLbl.classList.add("hidden");
+
+  if(type.value==="Income"){
+    toAcc.classList.remove("hidden");
+    toLbl.classList.remove("hidden");
+  }
+  if(type.value==="Expense"){
+    fromAcc.classList.remove("hidden");
+    fromLbl.classList.remove("hidden");
+    cat.classList.remove("hidden");
+    catLbl.classList.remove("hidden");
+  }
+  if(type.value==="Transfer"){
+    fromAcc.classList.remove("hidden");
+    fromLbl.classList.remove("hidden");
+    toAcc.classList.remove("hidden");
+    toLbl.classList.remove("hidden");
+  }
+}
+
+/* ---------- LOAD CATEGORIES ---------- */
+function loadCats(){
+ fetch(API+"?categories=1")
+ .then(r=>r.json())
+ .then(d=>{
+   cat.innerHTML="";
+   d.categories.forEach(c=>{
+     cat.innerHTML+=`<option>${c}</option>`;
+   });
+ });
+}
+
+/* ---------- SAVE (UNCHANGED) ---------- */
+function save(){
+ fetch(API,{
+   method:"POST",
+   body:JSON.stringify({
+     action:"save",
+     data:{
+       date:date.value,
+       user:session.name,
+       type:type.value,
+       from:fromAcc.value,
+       to:toAcc.value,
+       category:cat.value,
+       amount:amt.value,
+       mode:fromAcc.value||toAcc.value,
+       notes:note.value
+     }
+   })
+ }).then(loadAll);
+}
+
+/* ---------- LOAD ALL ---------- */
+function loadAll(){
+ loadDashboard();
+ loadMonthlyChart();
+ loadTable();
+}
+
+/* ---------- DASHBOARD + PIE ---------- */
+function loadDashboard(){
+ fetch(`${API}?dashboard=1&from=${from.value}&to=${to.value}`)
+ .then(r=>r.json())
+ .then(d=>{
+   inc.innerText=d.inc;
+   exp.innerText=d.exp;
+   cash.innerText=d.cash;
+   online.innerText=d.online;
+
+   if(pieChartObj) pieChartObj.destroy();
+   pieChartObj = new Chart(pieChart,{
+     type:"pie",
+     data:{
+       labels:Object.keys(d.cats),
+       datasets:[{data:Object.values(d.cats)}]
+     }
+   });
+ });
+}
+
+/* ---------- MONTH-WISE BAR ---------- */
+function loadMonthlyChart(){
+ fetch(API+"?monthly=1")
+ .then(r=>r.json())
+ .then(d=>{
+   const labels = Object.keys(d);
+   if(monthChartObj) monthChartObj.destroy();
+   monthChartObj = new Chart(monthChart,{
+     type:"bar",
+     data:{
+       labels:labels,
+       datasets:[
+         {label:"Income",data:labels.map(k=>d[k].inc),backgroundColor:"#4CAF50"},
+         {label:"Expense",data:labels.map(k=>d[k].exp),backgroundColor:"#FF5252"}
+       ]
+     },
+     options:{scales:{y:{beginAtZero:true}}}
+   });
+ });
+}
+
+/* ---------- TABLE + DELETE ---------- */
+function loadTable(){
+ fetch(`${API}?transactions=1&from=${from.value}&to=${to.value}`)
+ .then(r=>r.json())
+ .then(d=>{
+   let h='<tr><th>Date</th><th>User</th><th>Type</th><th>Category</th><th>Mode</th><th>Amount</th><th>Action</th></tr>';
+   d.data.forEach(r=>{
+     h+=`<tr>
+       <td>${r[0].split("T")[0]}</td>
+       <td>${r[1]}</td>
+       <td>${r[2]}</td>
+       <td>${r[5]||"-"}</td>
+       <td>${r[7]}</td>
+       <td>₹${r[6]}</td>
+       <td>
+         <button class="action-btn del" onclick="del(${r[9]})">Delete</button>
+       </td>
+     </tr>`;
+   });
+   txTable.innerHTML=h;
+ });
+}
+
+function del(row){
+ if(confirm("Delete this transaction?")){
+   fetch(API,{
+     method:"POST",
+     body:JSON.stringify({action:"delete",data:{row}})
+   }).then(loadAll);
+ }
+}
+
+/* ---------- MONTHLY PDF ---------- */
+function downloadMonthlyPDF(){
+ fetch(`${API}?monthlyPdf=1&month=${pdfMonth.value}`)
+ .then(r=>r.json())
+ .then(d=>window.open(d.url));
+}
+
+/* ---------- INIT ---------- */
+loadCats();
+logic();
+</script>
+
+</body>
+</html>
