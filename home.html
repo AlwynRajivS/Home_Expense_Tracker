@@ -11,67 +11,40 @@ body{
   font-family:Segoe UI;
   background:linear-gradient(135deg,#74ebd5,#ACB6E5)
 }
-.wrapper{
-  max-width:960px;
-  margin:auto;
-}
+.wrapper{max-width:960px;margin:auto}
 .box{
-  background:#fff;
-  margin:12px;
-  padding:16px;
+  background:#fff;margin:12px;padding:16px;
   border-radius:18px;
   box-shadow:0 8px 25px rgba(0,0,0,.2)
 }
-label{
-  font-size:13px;
-  font-weight:600;
-}
+label{font-size:13px;font-weight:600}
 input,select,button{
-  width:100%;
-  padding:12px;
-  margin-top:6px;
-  border-radius:10px;
-  border:1px solid #ccc;
+  width:100%;padding:12px;margin-top:6px;
+  border-radius:10px;border:1px solid #ccc;
   box-sizing:border-box;
 }
 button{
   background:linear-gradient(135deg,#667eea,#764ba2);
-  color:#fff;
-  font-weight:bold;
+  color:#fff;font-weight:bold
 }
 .hidden{display:none}
-
 .cards{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:10px;
+  display:grid;grid-template-columns:1fr 1fr;gap:10px
 }
-@media(max-width:600px){
-  .cards{grid-template-columns:1fr}
-}
-
-.chart-wrap{
-  width:100%;
-  overflow-x:auto;
-}
-
+@media(max-width:600px){.cards{grid-template-columns:1fr}}
 table{
-  width:100%;
-  border-collapse:collapse;
-  margin-top:10px;
-  font-size:12px;
+  width:100%;border-collapse:collapse;margin-top:10px;font-size:12px
 }
 th,td{
-  border:1px solid #ccc;
-  padding:6px;
-  text-align:center;
+  border:1px solid #ccc;padding:6px;text-align:center
 }
 th{background:#f0f0f0}
-
-h3{
-  text-align:center;
-  margin-top:15px;
+.action-btn{
+  padding:6px 10px;font-size:11px;
+  border-radius:6px;color:#fff;border:none
 }
+.del{background:#e53935}
+h3{text-align:center;margin-top:15px}
 </style>
 </head>
 
@@ -94,26 +67,20 @@ h3{
     <div class="box">Income ₹<span id="inc">0</span></div>
     <div class="box">Expense ₹<span id="exp">0</span></div>
     <div class="box">Cash ₹<span id="cash">0</span></div>
-    <div class="box">Online ₹<span id="online">0</span></div>
+    <div class="box">Bank ₹<span id="bank">0</span></div>
   </div>
 
-  <!-- ===== NEW: PREVIOUS MONTH CLOSING BALANCE ===== -->
   <h3>Previous Month Closing Balance</h3>
   <div class="cards">
     <div class="box">Cash ₹<span id="prevCash">0</span></div>
     <div class="box">Bank ₹<span id="prevBank">0</span></div>
   </div>
-  <!-- ===== END NEW ===== -->
 
   <h3>Month-wise Income vs Expense</h3>
-  <div class="chart-wrap">
-    <canvas id="monthChart"></canvas>
-  </div>
+  <canvas id="monthChart"></canvas>
 
   <h3>Expense by Category</h3>
-  <div class="chart-wrap">
-    <canvas id="pieChart"></canvas>
-  </div>
+  <canvas id="pieChart"></canvas>
 </div>
 
 <!-- ================= ADD TRANSACTION ================= -->
@@ -132,14 +99,12 @@ h3{
 
 <label id="fromLbl" class="hidden">From</label>
 <select id="fromAcc" class="hidden">
-  <option>Cash</option>
-  <option>Bank</option>
+  <option>Cash</option><option>Bank</option>
 </select>
 
 <label id="toLbl" class="hidden">To</label>
 <select id="toAcc" class="hidden">
-  <option>Cash</option>
-  <option>Bank</option>
+  <option>Cash</option><option>Bank</option>
 </select>
 
 <label id="catLbl" class="hidden">Category</label>
@@ -164,7 +129,7 @@ h3{
 
 <!-- ================= PDF ================= -->
 <div class="box">
-<button onclick="downloadPDF()">📄 Download PDF</button>
+<button onclick="downloadPDF()">📄 Download PDF (Date Range)</button>
 </div>
 
 </div>
@@ -178,79 +143,65 @@ if(!session.name) location.href="index.html";
 user.innerText="Welcome " + session.name;
 
 /* ---------- CHART OBJECTS ---------- */
-let monthChartObj = null;
-let pieChartObj = null;
+let monthChartObj=null, pieChartObj=null;
 
 /* ---------- FIELD LOGIC (UNCHANGED) ---------- */
 function logic(){
-  fromAcc.classList.add("hidden");
-  toAcc.classList.add("hidden");
-  cat.classList.add("hidden");
-  fromLbl.classList.add("hidden");
-  toLbl.classList.add("hidden");
-  catLbl.classList.add("hidden");
-
-  if(type.value==="Income"){
-    toAcc.classList.remove("hidden");
-    toLbl.classList.remove("hidden");
-  }
-  if(type.value==="Expense"){
-    fromAcc.classList.remove("hidden");
-    fromLbl.classList.remove("hidden");
-    cat.classList.remove("hidden");
-    catLbl.classList.remove("hidden");
-  }
-  if(type.value==="Transfer"){
-    fromAcc.classList.remove("hidden");
-    fromLbl.classList.remove("hidden");
-    toAcc.classList.remove("hidden");
-    toLbl.classList.remove("hidden");
-  }
+  [fromAcc,toAcc,cat,fromLbl,toLbl,catLbl].forEach(x=>x.classList.add("hidden"));
+  if(type.value==="Income"){toAcc.classList.remove("hidden");toLbl.classList.remove("hidden")}
+  if(type.value==="Expense"){fromAcc.classList.remove("hidden");fromLbl.classList.remove("hidden");cat.classList.remove("hidden");catLbl.classList.remove("hidden")}
+  if(type.value==="Transfer"){fromAcc.classList.remove("hidden");toAcc.classList.remove("hidden");fromLbl.classList.remove("hidden");toLbl.classList.remove("hidden")}
 }
 
 /* ---------- LOAD CATEGORIES ---------- */
 function loadCats(){
  fetch(API+"?categories=1")
  .then(r=>r.json())
- .then(d=>{
-   cat.innerHTML="";
-   d.categories.forEach(c=>cat.innerHTML+=`<option>${c}</option>`);
- });
+ .then(d=>cat.innerHTML=d.categories.map(c=>`<option>${c}</option>`).join(""));
 }
 
 /* ---------- SAVE ---------- */
 function save(){
  fetch(API,{
-   method:"POST",
-   body:JSON.stringify({
-     action:"save",
-     data:{
-       date:date.value,
-       user:session.name,
-       type:type.value,
-       from:fromAcc.value,
-       to:toAcc.value,
-       category:cat.value,
-       amount:amt.value,
-       mode:fromAcc.value||toAcc.value,
-       notes:note.value
-     }
-   })
+  method:"POST",
+  body:JSON.stringify({action:"save",data:{
+    date:date.value,user:session.name,type:type.value,
+    from:fromAcc.value,to:toAcc.value,
+    category:cat.value,amount:amt.value,
+    mode:fromAcc.value||toAcc.value,notes:note.value
+  }})
  }).then(loadAll);
 }
 
 /* ---------- LOAD ALL ---------- */
 function loadAll(){
  loadDashboard();
+ loadBalances();
+ loadPreviousMonth();
  loadMonthlyChart();
  loadTable();
+}
 
- // update balances for selected date range
- fetch(`${API}?balances=1&from=${from.value}&to=${to.value}`)
+/* ---------- BALANCES ---------- */
+function loadBalances(){
+ fetch(`${API}?balances=1&from=${from.value||""}&to=${to.value||""}`)
  .then(r=>r.json())
  .then(b=>{
-   cash.innerText=b.cash;
-   online.innerText=b.bank;
+   cash.innerText=b.cash||0;
+   bank.innerText=b.bank||0;
+ });
+}
+
+/* ---------- PREVIOUS MONTH ---------- */
+function loadPreviousMonth(){
+ if(!from.value) return;
+ const d=new Date(from.value);
+ const last=new Date(d.getFullYear(),d.getMonth(),0);
+ fetch(`${API}?balances=1&to=${last.toISOString().split("T")[0]}`)
+ .then(r=>r.json())
+ .then(b=>{
+   prevCash.innerText=b.cash||0;
+   prevBank.innerText=b.bank||0;
  });
 }
 
@@ -259,31 +210,27 @@ function loadDashboard(){
  fetch(`${API}?dashboard=1&from=${from.value}&to=${to.value}`)
  .then(r=>r.json())
  .then(d=>{
-   inc.innerText=d.inc;
-   exp.innerText=d.exp;
-
+   inc.innerText=d.inc||0;
+   exp.innerText=d.exp||0;
    if(pieChartObj) pieChartObj.destroy();
-   pieChartObj = new Chart(pieChart,{
+   pieChartObj=new Chart(pieChart,{
      type:"pie",
-     data:{
-       labels:Object.keys(d.cats),
-       datasets:[{data:Object.values(d.cats)}]
-     }
+     data:{labels:Object.keys(d.cats),datasets:[{data:Object.values(d.cats)}]}
    });
  });
 }
 
-/* ---------- MONTH-WISE BAR ---------- */
+/* ---------- MONTH CHART ---------- */
 function loadMonthlyChart(){
  fetch(API+"?monthly=1")
  .then(r=>r.json())
  .then(d=>{
-   const labels = Object.keys(d);
+   const labels=Object.keys(d);
    if(monthChartObj) monthChartObj.destroy();
-   monthChartObj = new Chart(monthChart,{
+   monthChartObj=new Chart(monthChart,{
      type:"bar",
      data:{
-       labels:labels,
+       labels,
        datasets:[
          {label:"Income",data:labels.map(k=>d[k].inc),backgroundColor:"#4CAF50"},
          {label:"Expense",data:labels.map(k=>d[k].exp),backgroundColor:"#FF5252"}
@@ -299,48 +246,38 @@ function loadTable(){
  fetch(`${API}?transactions=1&from=${from.value}&to=${to.value}`)
  .then(r=>r.json())
  .then(d=>{
-   let h='<tr><th>Date</th><th>User</th><th>Type</th><th>Category</th><th>Mode</th><th>Amount</th></tr>';
+   let h='<tr><th>Date</th><th>User</th><th>Type</th><th>Category</th><th>Mode</th><th>Amount</th><th>Action</th></tr>';
    d.data.forEach(r=>{
      h+=`<tr>
-       <td>${r[0].split("T")[0]}</td>
-       <td>${r[1]}</td>
-       <td>${r[2]}</td>
-       <td>${r[5]||"-"}</td>
-       <td>${r[7]}</td>
-       <td>₹${r[6]}</td>
+     <td>${r[0].split("T")[0]}</td>
+     <td>${r[1]}</td>
+     <td>${r[2]}</td>
+     <td>${r[5]||"-"}</td>
+     <td>${r[7]}</td>
+     <td>₹${r[6]}</td>
+     <td><button class="action-btn del" onclick="del(${r[9]})">Delete</button></td>
      </tr>`;
    });
    txTable.innerHTML=h;
  });
 }
 
+function del(row){
+ if(confirm("Delete transaction?")){
+   fetch(API,{method:"POST",body:JSON.stringify({action:"delete",data:{row}})})
+   .then(loadAll);
+ }
+}
+
 /* ---------- PDF ---------- */
 function downloadPDF(){
- if(!from.value||!to.value){alert("Select date range");return;}
  fetch(`${API}?pdf=1&from=${from.value}&to=${to.value}`)
  .then(r=>r.json())
  .then(d=>window.open(d.url));
 }
 
-/* ---------- NEW: PREVIOUS MONTH CLOSING BALANCE ---------- */
-function loadPreviousMonthBalance(){
- const now = new Date();
- const lastDayPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0);
- const toDate = lastDayPrevMonth.toISOString().split("T")[0];
-
- fetch(`${API}?balances=1&to=${toDate}`)
- .then(r=>r.json())
- .then(b=>{
-   prevCash.innerText = b.cash;
-   prevBank.innerText = b.bank;
- });
-}
-
 /* ---------- INIT ---------- */
-loadCats();
-logic();
-loadPreviousMonthBalance();
+loadCats();logic();loadBalances();
 </script>
-
 </body>
 </html>
