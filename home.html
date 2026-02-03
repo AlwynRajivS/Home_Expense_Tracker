@@ -49,6 +49,34 @@ h3{text-align:center;margin-top:15px}
   transform:scale(.95);
 }
 
+/* TOAST */
+.toast{
+  position:fixed;
+  bottom:-80px;
+  left:50%;
+  transform:translateX(-50%);
+  background:linear-gradient(135deg,#43cea2,#185a9d);
+  color:#fff;
+  padding:14px 22px;
+  border-radius:40px;
+  font-size:14px;
+  font-weight:600;
+  box-shadow:0 12px 30px rgba(0,0,0,.35);
+  opacity:0;
+  transition:all .5s ease;
+  z-index:9999;
+}
+
+.toast.show{
+  bottom:30px;
+  opacity:1;
+}
+
+.toast.error{
+  background:linear-gradient(135deg,#ff416c,#ff4b2b);
+}
+
+
 </style>
 </head>
 
@@ -172,20 +200,37 @@ fetch(API+"?categories=1")
 
 /* SAVE */
 function save(){
-fetch(API,{method:"POST",body:JSON.stringify({
-action:"save",
-data:{
-date:date.value,
-user:session.name,
-type:type.value,
-from:fromAcc.value,
-to:toAcc.value,
-category:cat.value,
-amount:amt.value,
-mode:fromAcc.value||toAcc.value,
-notes:note.value
-}})}).then(loadAll);
+  fetch(API,{
+    method:"POST",
+    body:JSON.stringify({
+      action:"save",
+      data:{
+        date:date.value,
+        user:session.name,
+        type:type.value,
+        from:fromAcc.value,
+        to:toAcc.value,
+        category:cat.value,
+        amount:amt.value,
+        mode:fromAcc.value||toAcc.value,
+        notes:note.value
+      }
+    })
+  })
+  .then(r=>r.json())
+  .then(()=>{
+    showToast("✅ Transaction saved successfully");
+
+    amt.value="";
+    note.value="";
+
+    loadAll();
+  })
+  .catch(()=>{
+    showToast("❌ Failed to save transaction","error");
+  });
 }
+
 
 /* LOAD ALL */
 function loadAll(){
@@ -307,6 +352,18 @@ function logout(){
 /* INIT */
 logic();
 loadBalances();
+
+<script>
+function showToast(msg,type="success"){
+  const t=document.getElementById("toast");
+  t.innerText=msg;
+  t.className="toast show"+(type==="error"?" error":"");
+
+  setTimeout(()=>t.classList.remove("show"),3000);
+}
 </script>
+
+</script>
+<div id="toast" class="toast"></div>
 </body>
 </html>
