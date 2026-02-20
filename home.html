@@ -1736,7 +1736,7 @@ function switchTab(tab, btn){
   document.querySelectorAll(`[data-tab="${tab}"]`).forEach(b=>b.classList.add('active'));
 
   // tab-specific init
-  if(tab==='analytics') buildAnalytics();
+  if(tab==='analytics'){ buildAnalytics(); }
   if(tab==='budget') refreshBudgetProgress();
   if(tab==='reports'){
     document.getElementById('repFrom').value=document.getElementById('from').value;
@@ -1867,10 +1867,9 @@ async function loadDashboard(from,to){
   document.getElementById('expBadge').textContent=pct+'% of income';
   document.getElementById('savingsRate').textContent=inc>0?Math.round(((inc-exp)/inc)*100):0;
 
+  window._lastCats=d.cats||{}; window._lastExp=exp;
   buildInsights(inc,exp,d.cats||{});
   buildPieChart(d.cats||{});
-  buildDonutChart(d.cats||{});
-  buildCatBreakdown(d.cats||{},exp);
 }
 
 /* ── MONTHLY CHART ─────────────────────────────── */
@@ -1917,17 +1916,8 @@ async function loadMonthlyChart(){
     options:commonOpts
   });
 
-  trendChartObj=new Chart(document.getElementById('trendChart'),{
-    type:'line',
-    data:{
-      labels,
-      datasets:[
-        {label:'Income',data:incData,borderColor:'#3dd68c',backgroundColor:'rgba(61,214,140,0.08)',borderWidth:2.5,pointRadius:4,pointBackgroundColor:'#3dd68c',fill:true,tension:0.4},
-        {label:'Expense',data:expData,borderColor:'#f0605a',backgroundColor:'rgba(240,96,90,0.08)',borderWidth:2.5,pointRadius:4,pointBackgroundColor:'#f0605a',fill:true,tension:0.4}
-      ]
-    },
-    options:commonOpts
-  });
+  // Store for lazy trendChart build when analytics tab opens
+  window._monthData={labels,incData,expData,commonOpts};
 }
 
 /* ── PIE & DONUT ─────────────────────────────── */
@@ -2216,6 +2206,85 @@ function refreshRecentList(){
 /* ── ANALYTICS ─────────────────────────────────── */
 function buildAnalytics(){
   buildHeatmap();
+  buildDonutChart(window._lastCats||{});
+  buildCatBreakdown(window._lastCats||{},window._lastExp||0);
+  buildTrendChart();
+}
+
+/* ── STORE LATEST CAT DATA FOR ANALYTICS TAB ─── */
+var _lastCats={}, _lastExp=0;
+
+function buildDonutChart(cats){
+  var dc=document.getElementById('donutChart');
+  if(!dc) return;
+  var labels=Object.keys(cats), data=Object.values(cats);
+  if(donutChartObj){
+    donutChartObj.data.labels=labels;
+    donutChartObj.data.datasets[0].data=data;
+    donutChartObj.update('none');
+    return;
+  }
+  donutChartObj=new Chart(dc,{
+    type:"doughnut",
+    data:{labels,datasets:[{data,backgroundColor:['#c9a84c','#3dd68c','#f0605a','#5b8dee','#9d6ef8','#f4934a','#22d3ee','#fb7185','#a3e635','#e879f9'],borderWidth:0,hoverOffset:8}]},
+    options:{
+      responsive:true,maintainAspectRatio:true,animation:{duration:400},
+      cutout:'65%',
+      plugins:{legend:{position:'bottom',labels:{padding:12,usePointStyle:true,pointStyle:'circle',font:{size:11}}}}
+    }
+  });
+}
+
+function buildCatBreakdown(cats,totalExp){
+  var el=document.getElementById('catBreakdown');
+  if(!el) return;
+  var palette=['#c9a84c','#3dd68c','#f0605a','#5b8dee','#9d6ef8','#f4934a','#22d3ee','#fb7185','#a3e635','#e879f9'];
+  if(!Object.keys(cats).length){
+    el.innerHTML='<div class="empty-state"><div class="empty-state-icon">📊</div><div class="empty-state-text">No expense data</div></div>';
+    return;
+  }
+  var sorted=Object.entries(cats).sort((a,b)=>b[1]-a[1]);
+  el.innerHTML=sorted.map(([name,val],i)=>{
+    var pct=totalExp>0?Math.round((val/totalExp)*100):0;
+    return\`<div style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="width:9px;height:9px;border-radius:50%;background:\${palette[i%palette.length]};flex-shrink:0"></div>
+          <span style="font-size:13px;font-weight:600;color:var(--text-primary)">\${name}</span>
+        </div>
+        <div style="text-align:right">
+          <span style="font-weight:700;color:var(--text-primary)">₹\${fmt(val)}</span>
+          <span style="font-size:11px;color:var(--text-muted);margin-left:6px">\${pct}%</span>
+        </div>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" style="width:\${pct}%;background:\${palette[i%palette.length]}"></div></div>
+    </div>\`;
+  }).join('');
+}
+
+function buildTrendChart(){
+  var md=window._monthData;
+  if(!md) return;
+  var tc=document.getElementById('trendChart');
+  if(!tc) return;
+  if(trendChartObj){
+    trendChartObj.data.labels=md.labels;
+    trendChartObj.data.datasets[0].data=md.incData;
+    trendChartObj.data.datasets[1].data=md.expData;
+    trendChartObj.update('none');
+    return;
+  }
+  trendChartObj=new Chart(tc,{
+    type:"line",
+    data:{
+      labels:md.labels,
+      datasets:[
+        {label:"Income",data:md.incData,borderColor:"#3dd68c",backgroundColor:"rgba(61,214,140,0.08)",borderWidth:2.5,pointRadius:4,pointBackgroundColor:"#3dd68c",fill:true,tension:0.4},
+        {label:"Expense",data:md.expData,borderColor:"#f0605a",backgroundColor:"rgba(240,96,90,0.08)",borderWidth:2.5,pointRadius:4,pointBackgroundColor:"#f0605a",fill:true,tension:0.4}
+      ]
+    },
+    options:md.commonOpts
+  });
 }
 
 /* ── BUDGET ─────────────────────────────────────── */
@@ -2251,7 +2320,7 @@ function refreshBudgetProgress(){
   const colors=['fill-gold','fill-green','fill-blue','fill-purple','fill-orange','fill-red'];
 
   let ovHtml='', prHtml='';
-  Object.entries(budgets).forEach(([cat,limit],i){
+  Object.entries(budgets).forEach(([cat,limit],i) => {
     const spent=catSpend[cat]||0;
     const pct=Math.min(100,Math.round((spent/limit)*100));
     const over=spent>limit;
