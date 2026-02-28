@@ -507,7 +507,23 @@ function calBlockShift(key,dir){calState[key].viewYear+=dir;renderCal(key);}
 function calMode(key,mode){calState[key].mode=mode;renderCal(key);}
 function calPickMonth(key,m){calState[key].viewMonth=m;calState[key].mode="day";renderCal(key);}
 function calPickYear(key,y){calState[key].viewYear=y;calState[key].mode="month";renderCal(key);}
-function selectDay(key,y,m,d){const dt=new Date(y,m,d);calState[key].selectedDate=dt;calState[key].onSelect(dt);closeCal(key);}
+function selectDay(key,y,m,d){
+  const dt = new Date(y, m, d);
+
+  calState[key].selectedDate = dt;
+  calState[key].viewYear = y;
+  calState[key].viewMonth = m;
+
+  if (calState[key].onSelect) {
+    calState[key].onSelect(dt);
+  }
+
+  // update display text immediately
+  const txt = document.getElementById(key + "Text");
+  if (txt) txt.textContent = displayDate(dt);
+
+  closeCal(key);
+}
 function goToday(key){const t=new Date();calState[key].selectedDate=t;calState[key].viewYear=t.getFullYear();calState[key].viewMonth=t.getMonth();calState[key].onSelect(t);closeCal(key);}
 function clearDate(key){calState[key].selectedDate=null;calState[key].onSelect(null);closeCal(key);}
 function formatDate(d){if(!d)return"";return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;}
@@ -519,8 +535,13 @@ initCal("from",{initial:firstOfMonth,onSelect:(d)=>{document.getElementById("fro
 document.getElementById("fromText").textContent=displayDate(firstOfMonth);
 initCal("to",{initial:today,onSelect:(d)=>{document.getElementById("toText").textContent=displayDate(d);syncExportTo(d);}});
 document.getElementById("toText").textContent=displayDate(today);
-initCal("txdate",{initial:today,onSelect:(d)=>{document.getElementById("txDateText").textContent=displayDate(d);}});
-document.getElementById("txDateText").textContent=displayDate(today);
+initCal("txdate",{
+  initial: today,
+  onSelect: (d) => {
+    calState["txdate"].selectedDate = d;
+    document.getElementById("txDateText").textContent = displayDate(d);
+  }
+});
 initCal("expFrom",{initial:firstOfMonth,onSelect:(d)=>{document.getElementById("expFromText").textContent=displayDate(d);}});
 document.getElementById("expFromText").textContent=displayDate(firstOfMonth);
 initCal("expTo",{initial:today,onSelect:(d)=>{document.getElementById("expToText").textContent=displayDate(d);}});
@@ -536,7 +557,7 @@ function logic(){const t=document.getElementById("type").value;document.getEleme
 fetch(API+"?categories=1").then(r=>r.json()).then(d=>{const opts=d.categories.map(c=>`<option>${c}</option>`).join("");document.getElementById("cat").innerHTML=opts;document.getElementById("filterCat").innerHTML='<option value="">All Categories</option>'+opts;});
 
 let editingRow=null;
-function save(){const txDate=calState["txdate"].selectedDate;const amt=document.getElementById("amt").value;if(!txDate||!amt){showToast("❌ Date and amount are required","error");return;}const data={date:formatDate(txDate),user:session.name,type:document.getElementById("type").value,from:document.getElementById("fromAcc").value,to:document.getElementById("toAcc").value,category:document.getElementById("cat").value,amount:amt,mode:document.getElementById("fromAcc").value||document.getElementById("toAcc").value,notes:document.getElementById("note").value};const action=editingRow?"update":"save";if(editingRow)data.row=editingRow;fetch(API,{method:"POST",body:JSON.stringify({action,data})}).then(r=>r.json()).then(()=>{showToast(editingRow?"✅ Transaction updated":"✅ Transaction saved","success");resetForm();loadAll();}).catch(()=>showToast("❌ Save failed. Try again.","error"));}
+function save(){const txDate = calState["txdate"]?.selectedDate;const amt=document.getElementById("amt").value;if(!txDate || !amt){showToast("❌ Date and amount are required","error");return;}const data={date:formatDate(txDate),user:session.name,type:document.getElementById("type").value,from:document.getElementById("fromAcc").value,to:document.getElementById("toAcc").value,category:document.getElementById("cat").value,amount:amt,mode:document.getElementById("fromAcc").value||document.getElementById("toAcc").value,notes:document.getElementById("note").value};const action=editingRow?"update":"save";if(editingRow)data.row=editingRow;fetch(API,{method:"POST",body:JSON.stringify({action,data})}).then(r=>r.json()).then(()=>{showToast(editingRow?"✅ Transaction updated":"✅ Transaction saved","success");resetForm();loadAll();}).catch(()=>showToast("❌ Save failed. Try again.","error"));}
 function resetForm(){document.getElementById("amt").value="";document.getElementById("note").value="";editingRow=null;document.getElementById("formTitle").textContent="Add Transaction";document.getElementById("formSub").textContent="Fill in the form to record a new entry";document.getElementById("cancelBtn").classList.add("hidden");}
 function cancelEdit(){resetForm();}
 function editTx(row,rowData){editingRow=row;document.getElementById("formTitle").textContent="Edit Transaction";document.getElementById("formSub").textContent="Update and save below";document.getElementById("cancelBtn").classList.remove("hidden");const d=new Date(rowData[0]);calState["txdate"].selectedDate=d;calState["txdate"].viewYear=d.getFullYear();calState["txdate"].viewMonth=d.getMonth();document.getElementById("txDateText").textContent=displayDate(d);document.getElementById("type").value=rowData[2];document.getElementById("fromAcc").value=rowData[3]||"Cash";document.getElementById("toAcc").value=rowData[4]||"Cash";document.getElementById("cat").value=rowData[5]||"";document.getElementById("amt").value=rowData[6];document.getElementById("note").value=rowData[8]||"";logic();switchTab(document.querySelector(".tab-btn:nth-child(2)"),"add");showToast("📝 Edit mode","success");}
