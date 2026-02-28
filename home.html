@@ -532,8 +532,8 @@ function openCal(key){
   if(el.classList.contains("open")){closeCal(key);return;}
   const disp=document.getElementById(key+"Display");
   if(disp)disp.classList.add("open");
-  
-  // For transaction date inside card: use fixed positioning to escape stacking context
+
+  // For txdate inside a card: use position:fixed so it escapes stacking context clipping
   if(key==="txdate"&&disp){
     const rect=disp.getBoundingClientRect();
     el.style.position="fixed";
@@ -542,19 +542,20 @@ function openCal(key){
     el.style.right="auto";
     el.style.zIndex="9999";
     el.style.width=Math.max(rect.width,288)+"px";
-    // Adjust if goes off screen right
     if(rect.left+288>window.innerWidth){
       el.style.left="auto";
       el.style.right=(window.innerWidth-rect.right)+"px";
     }
   }
-  
+
   renderCal(key);
   el.classList.add("open");
   setTimeout(()=>{
     const h=(e)=>{
-      const w=el.closest(".date-field-wrap");
-      if(w&&!w.contains(e.target)&&!el.contains(e.target)){
+      // Check both: the popup itself AND the trigger display button
+      const insidePopup=el.contains(e.target);
+      const insideDisp=disp&&disp.contains(e.target);
+      if(!insidePopup&&!insideDisp){
         closeCal(key);
         document.removeEventListener("click",h);
       }
