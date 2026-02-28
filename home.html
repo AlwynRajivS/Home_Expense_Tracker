@@ -51,6 +51,9 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 .cal-popup.open{display:block;}
 @keyframes calIn{from{opacity:0;transform:translateY(-8px) scale(0.97);}to{opacity:1;transform:translateY(0) scale(1);}}
 .date-field-wrap.flip-left .cal-popup{left:auto;right:0;}
+/* ── FIX: Ensure txDateWrap calendar is above card content ── */
+#txDateWrap{z-index:100;}
+#txDateWrap .cal-popup{z-index:600;}
 .cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
 .cal-title{font-family:'Bricolage Grotesque',sans-serif;font-size:15px;font-weight:700;color:var(--text);cursor:pointer;padding:4px 8px;border-radius:7px;}.cal-title:hover{background:var(--accent-bg);color:var(--accent);}
 .cal-nav{background:var(--bg3);border:1px solid var(--border);border-radius:7px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;color:var(--text2);transition:all 0.15s;}.cal-nav:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent);}
@@ -525,46 +528,57 @@ const DAYS=["Su","Mo","Tu","We","Th","Fr","Sa"];
 
 function initCal(key,opts){const today=new Date();calState[key]={selectedDate:opts.initial||null,viewYear:opts.initial?opts.initial.getFullYear():today.getFullYear(),viewMonth:opts.initial?opts.initial.getMonth():today.getMonth(),mode:"day",onSelect:opts.onSelect};}
 
+// ── FIX: Removed broken position:fixed hack for txdate.
+// The .card already has overflow:visible, so the calendar naturally overflows.
+// We use a single shared outside-click handler reference per key so it can be
+// properly removed, preventing stale listeners from closing the calendar prematurely.
+const _calOutsideHandlers = {};
+
 function openCal(key){
   closeAllCals();
-  const el=document.getElementById(key+"Cal");
-  if(!el)return;
-  if(el.classList.contains("open")){closeCal(key);return;}
-  const disp=document.getElementById(key+"Display");
-  if(disp)disp.classList.add("open");
-
-  // For txdate inside a card: use position:fixed so it escapes stacking context clipping
-  if(key==="txdate"&&disp){
-    const rect=disp.getBoundingClientRect();
-    el.style.position="fixed";
-    el.style.top=(rect.bottom+6)+"px";
-    el.style.left=rect.left+"px";
-    el.style.right="auto";
-    el.style.zIndex="9999";
-    el.style.width=Math.max(rect.width,288)+"px";
-    if(rect.left+288>window.innerWidth){
-      el.style.left="auto";
-      el.style.right=(window.innerWidth-rect.right)+"px";
-    }
-  }
+  const el = document.getElementById(key + "Cal");
+  if(!el) return;
+  if(el.classList.contains("open")){ closeCal(key); return; }
+  const disp = document.getElementById(key + "Display");
+  if(disp) disp.classList.add("open");
 
   renderCal(key);
   el.classList.add("open");
-  setTimeout(()=>{
-    const h=(e)=>{
-      // Check both: the popup itself AND the trigger display button
-      const insidePopup=el.contains(e.target);
-      const insideDisp=disp&&disp.contains(e.target);
-      if(!insidePopup&&!insideDisp){
+
+  // Remove any stale handler first
+  if(_calOutsideHandlers[key]){
+    document.removeEventListener("pointerdown", _calOutsideHandlers[key]);
+    delete _calOutsideHandlers[key];
+  }
+
+  // Use pointerdown so it fires before the click event on cal-day cells,
+  // allowing selectDay's click to fire without interference.
+  // We wrap in requestAnimationFrame to skip the current event loop tick.
+  requestAnimationFrame(() => {
+    _calOutsideHandlers[key] = (e) => {
+      const insidePopup = el.contains(e.target);
+      const insideDisp = disp && disp.contains(e.target);
+      if(!insidePopup && !insideDisp){
         closeCal(key);
-        document.removeEventListener("click",h);
       }
     };
-    document.addEventListener("click",h);
-  },10);
+    document.addEventListener("pointerdown", _calOutsideHandlers[key]);
+  });
 }
 
-function closeCal(key){const el=document.getElementById(key+"Cal");const disp=document.getElementById(key+"Display");if(el){el.classList.remove("open");if(key==="txdate"){el.style.position="";el.style.top="";el.style.left="";el.style.right="";el.style.zIndex="";el.style.width="";}}if(disp)disp.classList.remove("open");if(calState[key])calState[key].mode="day";}
+function closeCal(key){
+  const el = document.getElementById(key + "Cal");
+  const disp = document.getElementById(key + "Display");
+  if(el) el.classList.remove("open");
+  if(disp) disp.classList.remove("open");
+  if(calState[key]) calState[key].mode = "day";
+  // Clean up the outside handler
+  if(_calOutsideHandlers[key]){
+    document.removeEventListener("pointerdown", _calOutsideHandlers[key]);
+    delete _calOutsideHandlers[key];
+  }
+}
+
 function closeAllCals(){Object.keys(calState).forEach(k=>closeCal(k));}
 
 function renderCal(key){const el=document.getElementById(key+"Cal");if(!el||!calState[key])return;const s=calState[key];if(s.mode==="month"){renderMonthPicker(key,el);return;}if(s.mode==="year"){renderYearPicker(key,el);return;}const today=new Date();today.setHours(0,0,0,0);const firstDay=new Date(s.viewYear,s.viewMonth,1).getDay();const daysInMonth=new Date(s.viewYear,s.viewMonth+1,0).getDate();const daysInPrev=new Date(s.viewYear,s.viewMonth,0).getDate();let cells="";for(let i=firstDay-1;i>=0;i--)cells+=`<div class="cal-day other-month">${daysInPrev-i}</div>`;for(let d=1;d<=daysInMonth;d++){const dt=new Date(s.viewYear,s.viewMonth,d);const isToday=dt.getTime()===today.getTime();const isSel=s.selectedDate&&dt.getTime()===((()=>{const x=new Date(s.selectedDate);x.setHours(0,0,0,0);return x.getTime();})());cells+=`<div class="cal-day${isToday?" today":""}${isSel?" selected":""}" onclick="selectDay('${key}',${s.viewYear},${s.viewMonth},${d})">${d}</div>`;}const rem=(7-((firstDay+daysInMonth)%7))%7;for(let i=1;i<=rem;i++)cells+=`<div class="cal-day other-month">${i}</div>`;el.innerHTML=`<div class="cal-head"><div class="cal-nav" onclick="calNav('${key}',-1)">‹</div><div class="cal-title" onclick="calMode('${key}','month')">${MONTHS[s.viewMonth]} ${s.viewYear}</div><div class="cal-nav" onclick="calNav('${key}',1)">›</div></div><div class="cal-days-header">${DAYS.map(d=>`<div class="cal-day-name">${d}</div>`).join("")}</div><div class="cal-grid">${cells}</div><div class="cal-footer"><button class="cal-footer-btn today-btn" onclick="goToday('${key}')">Today</button><button class="cal-footer-btn clear-btn" onclick="clearDate('${key}')">Clear</button></div>`;}
@@ -617,9 +631,7 @@ function loadAll(){loadBalances();loadOpeningBalance();loadDashboard();loadMonth
 
 let chartObjs={};
 
-/* ═══ CLOSING BALANCE STATE ═══
-   We need opening (from loadOpeningBalance) + per-account inc/exp (from loadTable)
-   Both are async, so we use a shared state and render only when both are ready.        */
+/* ═══ CLOSING BALANCE STATE ═══ */
 const _cb = {
   openCash:0, openBank:0,
   incCash:0, incBank:0,
@@ -675,7 +687,6 @@ function loadTable(){
     document.getElementById("avgDaily").textContent="₹"+Math.round(te/days);
     document.getElementById("txCount").textContent=d.data.length;
     buildRecentFeed(d.data.slice(0,5));
-    /* Compute per-account income/expense for closing balance */
     _cb.incCash=0;_cb.incBank=0;_cb.expCash=0;_cb.expBank=0;
     d.data.forEach(r=>{
       const type=r[2],to=(r[4]||"").trim(),from=(r[3]||"").trim(),amt=parseFloat(r[6]||0);
@@ -687,7 +698,6 @@ function loadTable(){
       }
     });
     _cb._txReady=true;_renderClosingBalance();
-    // Refresh analytics charts that depend on allTransactions if analytics tab is active
     if(document.getElementById("tab-analytics").classList.contains("active")){buildAnalytics();}
   });
 }
@@ -712,257 +722,79 @@ function buildInsights(d){
   const savRate=inc>0?Math.round((sv/inc)*100):0;
 
   const cards=[
-    {
-      icon:ratio<50?"🌟":ratio<70?"👍":ratio<90?"⚠️":"🚨",
-      bg:ratio<70?"rgba(0,200,150,0.1)":ratio<90?"rgba(245,158,11,0.1)":"rgba(240,67,110,0.1)",
-      t:"Spending Ratio",
-      p:`Spent <b>${ratio}%</b> of income. ${ratio<50?"Excellent discipline! You're in great shape.":ratio<70?"Good control — well within healthy range.":ratio<90?"Getting high — consider cutting discretionary spend.":"Over-spending! Expenses exceed 90% of income."}`
-    },
-    {
-      icon:top?"🏆":"📊",
-      bg:"rgba(240,67,110,0.1)",
-      t:"Top Expense",
-      p:top?`<b>${top[0]}</b> is your biggest category at <b>₹${Math.round(top[1]).toLocaleString("en-IN")}</b>${top2?`, followed by ${top2[0]} (₹${Math.round(top2[1]).toLocaleString("en-IN")})`:""}.`:"No expense data in this period."
-    },
-    {
-      icon:sv>=0?"💰":"💸",
-      bg:sv>=0?"rgba(0,200,150,0.1)":"rgba(240,67,110,0.1)",
-      t:"Net Position",
-      p:`${sv>=0?"Saved":"Overspent by"} <b>₹${Math.abs(sv).toLocaleString("en-IN")}</b> (${Math.abs(savRate)}% of income). ${sv>=0?(savRate>30?"Exceptional saving rate! 🎉":savRate>15?"Solid savings discipline.":"Positive but room to save more."):"Review your spending immediately."}`
-    },
-    {
-      icon:cats.length>=4?"🎯":"📝",
-      bg:"rgba(91,110,245,0.1)",
-      t:"Category Spread",
-      p:cats.length>0?`Spending across <b>${cats.length}</b> categories. ${cats.length>=5?"Diverse spending — review if all are essential.":cats.length>=3?"Moderate spread across categories.":"Spending is concentrated — good control."}`:"No category data available."
-    },
-    {
-      icon:inc>0?"📈":"—",
-      bg:"rgba(0,184,217,0.1)",
-      t:"Income Health",
-      p:inc>0?`Income of <b>₹${inc.toLocaleString("en-IN")}</b>. ${sv>0?"Ends the period in surplus.":sv===0?"Exactly broke even this period.":"Deficit — consider boosting income or cutting costs."}`:"No income recorded in this period."
-    },
-    {
-      icon:exp>0?"🔍":"✅",
-      bg:exp>inc?"rgba(240,67,110,0.08)":"rgba(245,158,11,0.1)",
-      t:"Expense Check",
-      p:exp>0?`Total outflow <b>₹${exp.toLocaleString("en-IN")}</b>. Daily average: <b>₹${Math.round(exp/30).toLocaleString("en-IN")}</b>/day.${exp>inc?" Exceeding income — take action now.":""}`:"Zero expenses recorded."
-    }
+    {icon:ratio<50?"🌟":ratio<70?"👍":ratio<90?"⚠️":"🚨",bg:ratio<70?"rgba(0,200,150,0.1)":ratio<90?"rgba(245,158,11,0.1)":"rgba(240,67,110,0.1)",t:"Spending Ratio",p:`Spent <b>${ratio}%</b> of income. ${ratio<50?"Excellent discipline! You're in great shape.":ratio<70?"Good control — well within healthy range.":ratio<90?"Getting high — consider cutting discretionary spend.":"Over-spending! Expenses exceed 90% of income."}`},
+    {icon:top?"🏆":"📊",bg:"rgba(240,67,110,0.1)",t:"Top Expense",p:top?`<b>${top[0]}</b> is your biggest category at <b>₹${Math.round(top[1]).toLocaleString("en-IN")}</b>${top2?`, followed by ${top2[0]} (₹${Math.round(top2[1]).toLocaleString("en-IN")})`:""}.`:"No expense data in this period."},
+    {icon:sv>=0?"💰":"💸",bg:sv>=0?"rgba(0,200,150,0.1)":"rgba(240,67,110,0.1)",t:"Net Position",p:`${sv>=0?"Saved":"Overspent by"} <b>₹${Math.abs(sv).toLocaleString("en-IN")}</b> (${Math.abs(savRate)}% of income). ${sv>=0?(savRate>30?"Exceptional saving rate! 🎉":savRate>15?"Solid savings discipline.":"Positive but room to save more."):"Review your spending immediately."}`},
+    {icon:cats.length>=4?"🎯":"📝",bg:"rgba(91,110,245,0.1)",t:"Category Spread",p:cats.length>0?`Spending across <b>${cats.length}</b> categories. ${cats.length>=5?"Diverse spending — review if all are essential.":cats.length>=3?"Moderate spread across categories.":"Spending is concentrated — good control."}`:"No category data available."},
+    {icon:inc>0?"📈":"—",bg:"rgba(0,184,217,0.1)",t:"Income Health",p:inc>0?`Income of <b>₹${inc.toLocaleString("en-IN")}</b>. ${sv>0?"Ends the period in surplus.":sv===0?"Exactly broke even this period.":"Deficit — consider boosting income or cutting costs."}`:"No income recorded in this period."},
+    {icon:exp>0?"🔍":"✅",bg:exp>inc?"rgba(240,67,110,0.08)":"rgba(245,158,11,0.1)",t:"Expense Check",p:exp>0?`Total outflow <b>₹${exp.toLocaleString("en-IN")}</b>. Daily average: <b>₹${Math.round(exp/30).toLocaleString("en-IN")}</b>/day.${exp>inc?" Exceeding income — take action now.":""}`:"Zero expenses recorded."}
   ];
   document.getElementById("insightsGrid").innerHTML=cards.map(i=>`<div class="insight-card"><div class="insight-icon" style="background:${i.bg}">${i.icon}</div><div class="insight-body"><h5>${i.t}</h5><p>${i.p}</p></div></div>`).join("");
 }
+
 function buildAnalytics(){
   fetch(API+"?monthly=1").then(r=>r.json()).then(d=>{
     const labels=Object.keys(d||{});
     if(!labels.length)return;
 
-    // ── KPIs ──
     let bestM="",bestNet=-Infinity,worstM="",worstNet=Infinity,totalInc=0,totalExp=0;
-    labels.forEach(k=>{
-      const net=(d[k].inc||0)-(d[k].exp||0);
-      totalInc+=(d[k].inc||0);totalExp+=(d[k].exp||0);
-      if(net>bestNet){bestNet=net;bestM=k;}
-      if(net<worstNet){worstNet=net;worstM=k;}
-    });
+    labels.forEach(k=>{const net=(d[k].inc||0)-(d[k].exp||0);totalInc+=(d[k].inc||0);totalExp+=(d[k].exp||0);if(net>bestNet){bestNet=net;bestM=k;}if(net<worstNet){worstNet=net;worstM=k;}});
     const months=labels.length;
     document.getElementById("kpiBestMonth").textContent=bestM+" (₹"+Math.round(bestNet).toLocaleString("en-IN")+")";
     document.getElementById("kpiWorstMonth").textContent=worstM+" (₹"+Math.round(worstNet).toLocaleString("en-IN")+")";
     document.getElementById("kpiAvgExp").textContent="₹"+Math.round(totalExp/months).toLocaleString("en-IN");
     document.getElementById("kpiAvgInc").textContent="₹"+Math.round(totalInc/months).toLocaleString("en-IN");
 
-    const mutedColor="#8896b3";
-    const fontFam="Plus Jakarta Sans";
-    const gridColor="rgba(128,128,128,0.1)";
+    const mutedColor="#8896b3";const fontFam="Plus Jakarta Sans";const gridColor="rgba(128,128,128,0.1)";
     const scaleOpts={y:{grid:{color:gridColor},ticks:{color:mutedColor,font:{family:fontFam}}},x:{grid:{display:false},ticks:{color:mutedColor,font:{family:fontFam}}}};
     const legendOpts={labels:{color:mutedColor,font:{family:fontFam},padding:10}};
 
-    // ── 1. Line Chart: Income vs Expense ──
     if(chartObjs.line)chartObjs.line.destroy();
-    chartObjs.line=new Chart(document.getElementById("lineChart"),{
-      type:"line",
-      data:{labels,datasets:[
-        {label:"Income",data:labels.map(k=>d[k].inc||0),borderColor:"#00c896",backgroundColor:"rgba(0,200,150,0.08)",tension:0.4,fill:true,pointRadius:4,pointBackgroundColor:"#00c896",pointHoverRadius:7},
-        {label:"Expense",data:labels.map(k=>d[k].exp||0),borderColor:"#f0436e",backgroundColor:"rgba(240,67,110,0.07)",tension:0.4,fill:true,pointRadius:4,pointBackgroundColor:"#f0436e",pointHoverRadius:7}
-      ]},
-      options:{responsive:true,maintainAspectRatio:true,interaction:{mode:"index",intersect:false},scales:scaleOpts,plugins:{legend:legendOpts,tooltip:{backgroundColor:"var(--card)",titleColor:"var(--text)",bodyColor:"var(--muted)",borderColor:"var(--border)",borderWidth:1}}}
-    });
+    chartObjs.line=new Chart(document.getElementById("lineChart"),{type:"line",data:{labels,datasets:[{label:"Income",data:labels.map(k=>d[k].inc||0),borderColor:"#00c896",backgroundColor:"rgba(0,200,150,0.08)",tension:0.4,fill:true,pointRadius:4,pointBackgroundColor:"#00c896",pointHoverRadius:7},{label:"Expense",data:labels.map(k=>d[k].exp||0),borderColor:"#f0436e",backgroundColor:"rgba(240,67,110,0.07)",tension:0.4,fill:true,pointRadius:4,pointBackgroundColor:"#f0436e",pointHoverRadius:7}]},options:{responsive:true,maintainAspectRatio:true,interaction:{mode:"index",intersect:false},scales:scaleOpts,plugins:{legend:legendOpts}}});
 
-    // ── 2. Net Savings Bar (green/red) ──
     if(chartObjs.netSavings)chartObjs.netSavings.destroy();
     const netData=labels.map(k=>(d[k].inc||0)-(d[k].exp||0));
-    chartObjs.netSavings=new Chart(document.getElementById("netSavingsChart"),{
-      type:"bar",
-      data:{labels,datasets:[{
-        label:"Net Savings",
-        data:netData,
-        backgroundColor:netData.map(v=>v>=0?"rgba(0,200,150,0.75)":"rgba(240,67,110,0.75)"),
-        borderRadius:6,borderSkipped:false
-      }]},
-      options:{responsive:true,maintainAspectRatio:true,interaction:{mode:"index",intersect:false},scales:{...scaleOpts,y:{...scaleOpts.y,grid:{...scaleOpts.y.grid},ticks:{...scaleOpts.y.ticks,callback:v=>"₹"+Math.round(v/1000)+"k"}}},plugins:{legend:legendOpts}}
-    });
+    chartObjs.netSavings=new Chart(document.getElementById("netSavingsChart"),{type:"bar",data:{labels,datasets:[{label:"Net Savings",data:netData,backgroundColor:netData.map(v=>v>=0?"rgba(0,200,150,0.75)":"rgba(240,67,110,0.75)"),borderRadius:6,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:true,interaction:{mode:"index",intersect:false},scales:{...scaleOpts,y:{...scaleOpts.y,ticks:{...scaleOpts.y.ticks,callback:v=>"₹"+Math.round(v/1000)+"k"}}},plugins:{legend:legendOpts}}});
 
-    // ── 3. All-Time Monthly Bar ──
     if(chartObjs.monthly2)chartObjs.monthly2.destroy();
-    chartObjs.monthly2=new Chart(document.getElementById("monthChart2"),{
-      type:"bar",
-      data:{labels,datasets:[
-        {label:"Income",data:labels.map(k=>d[k].inc||0),backgroundColor:"rgba(0,200,150,0.7)",borderRadius:5},
-        {label:"Expense",data:labels.map(k=>d[k].exp||0),backgroundColor:"rgba(240,67,110,0.7)",borderRadius:5}
-      ]},
-      options:{responsive:true,maintainAspectRatio:true,interaction:{mode:"index",intersect:false},scales:scaleOpts,plugins:{legend:legendOpts}}
-    });
+    chartObjs.monthly2=new Chart(document.getElementById("monthChart2"),{type:"bar",data:{labels,datasets:[{label:"Income",data:labels.map(k=>d[k].inc||0),backgroundColor:"rgba(0,200,150,0.7)",borderRadius:5},{label:"Expense",data:labels.map(k=>d[k].exp||0),backgroundColor:"rgba(240,67,110,0.7)",borderRadius:5}]},options:{responsive:true,maintainAspectRatio:true,interaction:{mode:"index",intersect:false},scales:scaleOpts,plugins:{legend:legendOpts}}});
 
-    // ── 4. Running Balance (cumulative net) ──
     if(chartObjs.runningBal)chartObjs.runningBal.destroy();
-    let running=0;
-    const runData=labels.map(k=>{running+=(d[k].inc||0)-(d[k].exp||0);return Math.round(running);});
-    chartObjs.runningBal=new Chart(document.getElementById("runningBalanceChart"),{
-      type:"line",
-      data:{labels,datasets:[{
-        label:"Cumulative Net",
-        data:runData,
-        borderColor:"#5b6ef5",
-        backgroundColor:"rgba(91,110,245,0.08)",
-        tension:0.4,fill:true,
-        pointRadius:3,pointBackgroundColor:"#5b6ef5",pointHoverRadius:7
-      }]},
-      options:{responsive:true,maintainAspectRatio:true,interaction:{mode:"index",intersect:false},
-        scales:{...scaleOpts,y:{...scaleOpts.y,ticks:{...scaleOpts.y.ticks,callback:v=>"₹"+Math.round(v/1000)+"k"}}},
-        plugins:{legend:legendOpts}}
-    });
+    let running=0;const runData=labels.map(k=>{running+=(d[k].inc||0)-(d[k].exp||0);return Math.round(running);});
+    chartObjs.runningBal=new Chart(document.getElementById("runningBalanceChart"),{type:"line",data:{labels,datasets:[{label:"Cumulative Net",data:runData,borderColor:"#5b6ef5",backgroundColor:"rgba(91,110,245,0.08)",tension:0.4,fill:true,pointRadius:3,pointBackgroundColor:"#5b6ef5",pointHoverRadius:7}]},options:{responsive:true,maintainAspectRatio:true,interaction:{mode:"index",intersect:false},scales:{...scaleOpts,y:{...scaleOpts.y,ticks:{...scaleOpts.y.ticks,callback:v=>"₹"+Math.round(v/1000)+"k"}}},plugins:{legend:legendOpts}}});
 
-    // ── 5. Category Donut (from allTransactions) ──
-    const catMap={};
-    allTransactions.forEach(r=>{if(r[2]==="Expense"&&r[5]){catMap[r[5]]=(catMap[r[5]]||0)+parseFloat(r[6]||0);}});
-    const catLabels=Object.keys(catMap).sort((a,b)=>catMap[b]-catMap[a]);
-    const catData=catLabels.map(c=>Math.round(catMap[c]));
+    const catMap={};allTransactions.forEach(r=>{if(r[2]==="Expense"&&r[5]){catMap[r[5]]=(catMap[r[5]]||0)+parseFloat(r[6]||0);}});
+    const catLabels=Object.keys(catMap).sort((a,b)=>catMap[b]-catMap[a]);const catData=catLabels.map(c=>Math.round(catMap[c]));
     if(chartObjs.analyticsDonut)chartObjs.analyticsDonut.destroy();
-    if(catLabels.length){
-      chartObjs.analyticsDonut=new Chart(document.getElementById("analyticsDonut"),{
-        type:"doughnut",
-        data:{labels:catLabels,datasets:[{data:catData,backgroundColor:["#5b6ef5","#f0436e","#00b8d9","#00c896","#f59e0b","#a78bfa","#34d399","#fb923c","#e879f9","#38bdf8"],borderWidth:0,hoverOffset:8}]},
-        options:{responsive:true,maintainAspectRatio:true,cutout:"58%",plugins:{legend:{position:"right",labels:{color:mutedColor,font:{family:fontFam,size:11},padding:8,boxWidth:12}}}}
-      });
-    }
+    if(catLabels.length){chartObjs.analyticsDonut=new Chart(document.getElementById("analyticsDonut"),{type:"doughnut",data:{labels:catLabels,datasets:[{data:catData,backgroundColor:["#5b6ef5","#f0436e","#00b8d9","#00c896","#f59e0b","#a78bfa","#34d399","#fb923c","#e879f9","#38bdf8"],borderWidth:0,hoverOffset:8}]},options:{responsive:true,maintainAspectRatio:true,cutout:"58%",plugins:{legend:{position:"right",labels:{color:mutedColor,font:{family:fontFam,size:11},padding:8,boxWidth:12}}}}});}
 
-    // ── 6. Ratio Chart (Inc vs Exp % stacked) ──
     if(chartObjs.ratioChart)chartObjs.ratioChart.destroy();
-    chartObjs.ratioChart=new Chart(document.getElementById("ratioChart"),{
-      type:"bar",
-      data:{labels,datasets:[
-        {label:"Income",data:labels.map(k=>d[k].inc||0),backgroundColor:"rgba(0,200,150,0.75)",borderRadius:4,stack:"s"},
-        {label:"Expense",data:labels.map(k=>d[k].exp||0),backgroundColor:"rgba(240,67,110,0.75)",borderRadius:4,stack:"s2"}
-      ]},
-      options:{responsive:true,maintainAspectRatio:true,interaction:{mode:"index",intersect:false},
-        scales:{...scaleOpts,y:{...scaleOpts.y,ticks:{...scaleOpts.y.ticks,callback:v=>"₹"+Math.round(v/1000)+"k"}}},
-        plugins:{legend:legendOpts}}
-    });
+    chartObjs.ratioChart=new Chart(document.getElementById("ratioChart"),{type:"bar",data:{labels,datasets:[{label:"Income",data:labels.map(k=>d[k].inc||0),backgroundColor:"rgba(0,200,150,0.75)",borderRadius:4,stack:"s"},{label:"Expense",data:labels.map(k=>d[k].exp||0),backgroundColor:"rgba(240,67,110,0.75)",borderRadius:4,stack:"s2"}]},options:{responsive:true,maintainAspectRatio:true,interaction:{mode:"index",intersect:false},scales:{...scaleOpts,y:{...scaleOpts.y,ticks:{...scaleOpts.y.ticks,callback:v=>"₹"+Math.round(v/1000)+"k"}}},plugins:{legend:legendOpts}}});
 
-    // ── 7. Monthly Breakdown Table ──
-    let tableHTML="";
-    let prevNet=null;
-    [...labels].reverse().forEach(k=>{
-      const inc=d[k].inc||0,exp=d[k].exp||0,net=inc-exp;
-      const savPct=inc>0?Math.round((net/inc)*100):0;
-      const netCls=net>=0?"sum-pos":"sum-neg";
-      const pctCls=savPct>=0?"sum-pos":"sum-neg";
-      let trend="—";
-      if(prevNet!==null){
-        const diff=net-prevNet;
-        trend=diff>0?`<span style="color:var(--success)">▲ ₹${Math.abs(Math.round(diff)).toLocaleString("en-IN")}</span>`:`<span style="color:var(--danger)">▼ ₹${Math.abs(Math.round(diff)).toLocaleString("en-IN")}</span>`;
-      }
-      prevNet=net;
-      tableHTML+=`<tr>
-        <td style="font-weight:700;color:var(--text)">${k}</td>
-        <td style="color:var(--success);font-weight:600">₹${Math.round(inc).toLocaleString("en-IN")}</td>
-        <td style="color:var(--danger);font-weight:600">₹${Math.round(exp).toLocaleString("en-IN")}</td>
-        <td class="${netCls}" style="font-weight:700;font-family:'Bricolage Grotesque',sans-serif">₹${Math.round(net).toLocaleString("en-IN")}</td>
-        <td class="${pctCls}" style="font-weight:600">${savPct}%</td>
-        <td>${trend}</td>
-      </tr>`;
-    });
+    let tableHTML="";let prevNet=null;
+    [...labels].reverse().forEach(k=>{const inc=d[k].inc||0,exp=d[k].exp||0,net=inc-exp;const savPct=inc>0?Math.round((net/inc)*100):0;const netCls=net>=0?"sum-pos":"sum-neg";const pctCls=savPct>=0?"sum-pos":"sum-neg";let trend="—";if(prevNet!==null){const diff=net-prevNet;trend=diff>0?`<span style="color:var(--success)">▲ ₹${Math.abs(Math.round(diff)).toLocaleString("en-IN")}</span>`:`<span style="color:var(--danger)">▼ ₹${Math.abs(Math.round(diff)).toLocaleString("en-IN")}</span>`;}prevNet=net;tableHTML+=`<tr><td style="font-weight:700;color:var(--text)">${k}</td><td style="color:var(--success);font-weight:600">₹${Math.round(inc).toLocaleString("en-IN")}</td><td style="color:var(--danger);font-weight:600">₹${Math.round(exp).toLocaleString("en-IN")}</td><td class="${netCls}" style="font-weight:700;font-family:'Bricolage Grotesque',sans-serif">₹${Math.round(net).toLocaleString("en-IN")}</td><td class="${pctCls}" style="font-weight:600">${savPct}%</td><td>${trend}</td></tr>`;});
     document.getElementById("monthlyBreakdownBody").innerHTML=tableHTML||`<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--muted)">No data</td></tr>`;
 
-    // ── 8. Weekday Spending Pattern ──
-    // Use allTransactions to build weekday expense totals
-    const weekdayExp=[0,0,0,0,0,0,0]; // Sun-Sat
-    const weekdayInc=[0,0,0,0,0,0,0];
-    allTransactions.forEach(r=>{
-      const dt=new Date(r[0]);
-      const dow=dt.getDay();
-      const amt=parseFloat(r[6]||0);
-      if(r[2]==="Expense")weekdayExp[dow]+=amt;
-      if(r[2]==="Income")weekdayInc[dow]+=amt;
-    });
+    const weekdayExp=[0,0,0,0,0,0,0];const weekdayInc=[0,0,0,0,0,0,0];
+    allTransactions.forEach(r=>{const dt=new Date(r[0]);const dow=dt.getDay();const amt=parseFloat(r[6]||0);if(r[2]==="Expense")weekdayExp[dow]+=amt;if(r[2]==="Income")weekdayInc[dow]+=amt;});
     const dowLabels=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
     if(chartObjs.weekday)chartObjs.weekday.destroy();
-    chartObjs.weekday=new Chart(document.getElementById("weekdayChart"),{
-      type:"bar",
-      data:{labels:dowLabels,datasets:[
-        {label:"Expenses",data:weekdayExp.map(v=>Math.round(v)),backgroundColor:["rgba(240,67,110,0.55)","rgba(240,67,110,0.7)","rgba(240,67,110,0.7)","rgba(240,67,110,0.7)","rgba(240,67,110,0.7)","rgba(91,110,245,0.7)","rgba(91,110,245,0.55)"],borderRadius:6,borderSkipped:false},
-        {label:"Income",data:weekdayInc.map(v=>Math.round(v)),backgroundColor:"rgba(0,200,150,0.5)",borderRadius:6,borderSkipped:false}
-      ]},
-      options:{responsive:true,maintainAspectRatio:true,interaction:{mode:"index",intersect:false},
-        scales:{...scaleOpts,y:{...scaleOpts.y,ticks:{...scaleOpts.y.ticks,callback:v=>"₹"+Math.round(v/1000)+"k"}}},
-        plugins:{legend:legendOpts,tooltip:{callbacks:{title:t=>"Day: "+t[0].label}}}}
-    });
+    chartObjs.weekday=new Chart(document.getElementById("weekdayChart"),{type:"bar",data:{labels:dowLabels,datasets:[{label:"Expenses",data:weekdayExp.map(v=>Math.round(v)),backgroundColor:["rgba(240,67,110,0.55)","rgba(240,67,110,0.7)","rgba(240,67,110,0.7)","rgba(240,67,110,0.7)","rgba(240,67,110,0.7)","rgba(91,110,245,0.7)","rgba(91,110,245,0.55)"],borderRadius:6,borderSkipped:false},{label:"Income",data:weekdayInc.map(v=>Math.round(v)),backgroundColor:"rgba(0,200,150,0.5)",borderRadius:6,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:true,interaction:{mode:"index",intersect:false},scales:{...scaleOpts,y:{...scaleOpts.y,ticks:{...scaleOpts.y.ticks,callback:v=>"₹"+Math.round(v/1000)+"k"}}},plugins:{legend:legendOpts,tooltip:{callbacks:{title:t=>"Day: "+t[0].label}}}}});
 
-    // ── 9. Category Expense Progress Bars ──
-    const catMap2={};
-    let catTotal=0;
-    allTransactions.forEach(r=>{if(r[2]==="Expense"&&r[5]){const a=parseFloat(r[6]||0);catMap2[r[5]]=(catMap2[r[5]]||0)+a;catTotal+=a;}});
+    const catMap2={};let catTotal=0;allTransactions.forEach(r=>{if(r[2]==="Expense"&&r[5]){const a=parseFloat(r[6]||0);catMap2[r[5]]=(catMap2[r[5]]||0)+a;catTotal+=a;}});
     const catColors=["#5b6ef5","#f0436e","#00b8d9","#00c896","#f59e0b","#a78bfa","#34d399","#fb923c"];
-    const sortedCats=Object.entries(catMap2).sort((a,b)=>b[1]-a[1]).slice(0,8);
-    const maxCat=sortedCats.length?sortedCats[0][1]:1;
-    document.getElementById("catBarsWrap").innerHTML=sortedCats.length?sortedCats.map(([cat,val],i)=>{
-      const pct=Math.round((val/maxCat)*100);
-      const share=catTotal>0?Math.round((val/catTotal)*100):0;
-      const col=catColors[i%catColors.length];
-      return `<div style="display:flex;flex-direction:column;gap:4px">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <span style="font-size:12px;font-weight:700;color:var(--text)">${cat}</span>
-          <span style="font-size:11px;color:var(--muted);font-weight:600">₹${Math.round(val).toLocaleString("en-IN")} &nbsp;·&nbsp; <span style="color:${col};font-weight:700">${share}%</span></span>
-        </div>
-        <div style="height:8px;background:var(--bg3);border-radius:8px;overflow:hidden">
-          <div style="height:100%;width:${pct}%;background:${col};border-radius:8px;transition:width 0.8s ease"></div>
-        </div>
-      </div>`;
-    }).join(""):`<div style="color:var(--muted);font-size:12px">No expense categories found</div>`;
+    const sortedCats=Object.entries(catMap2).sort((a,b)=>b[1]-a[1]).slice(0,8);const maxCat=sortedCats.length?sortedCats[0][1]:1;
+    document.getElementById("catBarsWrap").innerHTML=sortedCats.length?sortedCats.map(([cat,val],i)=>{const pct=Math.round((val/maxCat)*100);const share=catTotal>0?Math.round((val/catTotal)*100):0;const col=catColors[i%catColors.length];return `<div style="display:flex;flex-direction:column;gap:4px"><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:12px;font-weight:700;color:var(--text)">${cat}</span><span style="font-size:11px;color:var(--muted);font-weight:600">₹${Math.round(val).toLocaleString("en-IN")} &nbsp;·&nbsp; <span style="color:${col};font-weight:700">${share}%</span></span></div><div style="height:8px;background:var(--bg3);border-radius:8px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${col};border-radius:8px;transition:width 0.8s ease"></div></div></div>`;}).join(""):`<div style="color:var(--muted);font-size:12px">No expense categories found</div>`;
 
-    // ── 10. Top 5 Individual Expense Transactions ──
     const top5=allTransactions.filter(r=>r[2]==="Expense").sort((a,b)=>parseFloat(b[6])-parseFloat(a[6])).slice(0,5);
-    document.getElementById("top5Wrap").innerHTML=top5.length?top5.map((r,i)=>{
-      const icons=["🥇","🥈","🥉","4️⃣","5️⃣"];
-      return `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg3);border-radius:10px;border:1px solid var(--border)">
-        <span style="font-size:18px">${icons[i]}</span>
-        <div style="flex:1;min-width:0">
-          <div style="font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r[5]||r[2]}${r[8]?" · "+r[8]:""}</div>
-          <div style="font-size:10px;color:var(--muted)">${r[0].split("T")[0]} · ${r[3]||"—"}</div>
-        </div>
-        <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:15px;font-weight:800;color:var(--danger);flex-shrink:0">₹${parseFloat(r[6]).toLocaleString("en-IN")}</div>
-      </div>`;
-    }).join(""):`<div style="color:var(--muted);font-size:12px;padding:10px">No expense transactions loaded. Load data from Overview tab.</div>`;
+    document.getElementById("top5Wrap").innerHTML=top5.length?top5.map((r,i)=>{const icons=["🥇","🥈","🥉","4️⃣","5️⃣"];return `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg3);border-radius:10px;border:1px solid var(--border)"><span style="font-size:18px">${icons[i]}</span><div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r[5]||r[2]}${r[8]?" · "+r[8]:""}</div><div style="font-size:10px;color:var(--muted)">${r[0].split("T")[0]} · ${r[3]||"—"}</div></div><div style="font-family:'Bricolage Grotesque',sans-serif;font-size:15px;font-weight:800;color:var(--danger);flex-shrink:0">₹${parseFloat(r[6]).toLocaleString("en-IN")}</div></div>`;}).join(""):`<div style="color:var(--muted);font-size:12px;padding:10px">No expense transactions loaded. Load data from Overview tab.</div>`;
 
-    // ── 11. Pie Distribution: Total Inc vs Total Exp ──
     if(chartObjs.pieDist)chartObjs.pieDist.destroy();
-    const totalAllInc=labels.reduce((s,k)=>s+(d[k].inc||0),0);
-    const totalAllExp=labels.reduce((s,k)=>s+(d[k].exp||0),0);
-    const totalAllSav=Math.max(0,totalAllInc-totalAllExp);
-    chartObjs.pieDist=new Chart(document.getElementById("pieDistChart"),{
-      type:"doughnut",
-      data:{labels:["Savings/Net","Total Expenses"],datasets:[{
-        data:[Math.round(totalAllSav),Math.round(totalAllExp)],
-        backgroundColor:["rgba(0,200,150,0.8)","rgba(240,67,110,0.8)"],
-        borderWidth:0,hoverOffset:8
-      }]},
-      options:{responsive:true,maintainAspectRatio:true,cutout:"55%",
-        plugins:{legend:{position:"bottom",labels:{color:mutedColor,font:{family:fontFam},padding:12}},
-          tooltip:{callbacks:{label:ctx=>{const v=ctx.parsed;const tot=totalAllInc||1;return` ₹${Math.round(v).toLocaleString("en-IN")} (${Math.round(v/tot*100)}% of income)`;}}}}
-      }
-    });
-
+    const totalAllInc=labels.reduce((s,k)=>s+(d[k].inc||0),0);const totalAllExp=labels.reduce((s,k)=>s+(d[k].exp||0),0);const totalAllSav=Math.max(0,totalAllInc-totalAllExp);
+    chartObjs.pieDist=new Chart(document.getElementById("pieDistChart"),{type:"doughnut",data:{labels:["Savings/Net","Total Expenses"],datasets:[{data:[Math.round(totalAllSav),Math.round(totalAllExp)],backgroundColor:["rgba(0,200,150,0.8)","rgba(240,67,110,0.8)"],borderWidth:0,hoverOffset:8}]},options:{responsive:true,maintainAspectRatio:true,cutout:"55%",plugins:{legend:{position:"bottom",labels:{color:mutedColor,font:{family:fontFam},padding:12}},tooltip:{callbacks:{label:ctx=>{const v=ctx.parsed;const tot=totalAllInc||1;return` ₹${Math.round(v).toLocaleString("en-IN")} (${Math.round(v/tot*100)}% of income)`;}}}}});
   });
 }
+
 function downloadPDF(){const f=formatDate(calState["expFrom"].selectedDate)||getFrom();const t=formatDate(calState["expTo"].selectedDate)||getTo();if(!f||!t){showToast("❌ Select date range","error");return;}showToast("⏳ Generating PDF…");fetch(`${API}?pdf=1&from=${f}&to=${t}`).then(r=>r.json()).then(d=>window.open(d.url));}
 function downloadExcel(){const f=formatDate(calState["expFrom"].selectedDate)||getFrom();const t=formatDate(calState["expTo"].selectedDate)||getTo();if(!f||!t){showToast("❌ Select date range","error");return;}if(!allTransactions.length){showToast("❌ Load transactions from Overview first","error");return;}let csv="Date,User,Type,From,To,Category,Amount,Mode,Notes\n";allTransactions.forEach(r=>{csv+=`${r[0].split("T")[0]},${r[1]},${r[2]},${r[3]||""},${r[4]||""},${r[5]||""},${r[6]},${r[7]},${r[8]||""}\n`;});const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=`finvault_${f}_to_${t}.csv`;a.click();URL.revokeObjectURL(url);showToast("✅ CSV downloaded","success");}
 function logout(){sessionStorage.removeItem("user");location.href="index.html";}
@@ -972,8 +804,6 @@ logic();
 fetch(API+"?balances=1").then(r=>r.json()).then(b=>{document.getElementById("liveBalances").innerHTML=`<div class="trow"><span class="trow-label">Cash</span><span style="font-weight:700;color:var(--text)">₹${b.cash||0}</span></div><div class="trow"><span class="trow-label">Bank</span><span style="font-weight:700;color:var(--text)">₹${b.bank||0}</span></div><div class="trow" style="border:none"><span class="trow-label">Total</span><span style="font-weight:800;color:var(--accent3);font-family:'Bricolage Grotesque',sans-serif">₹${(parseInt(b.cash||0)+parseInt(b.bank||0))}</span></div>`;}).catch(()=>{});
 loadAll();
 document.addEventListener("keydown",e=>{if(e.key==="Escape")closeAllCals();});
-window.addEventListener("scroll",()=>{if(document.getElementById("txDateCal")?.classList.contains("open"))closeCal("txdate");},{passive:true});
-window.addEventListener("resize",()=>{if(document.getElementById("txDateCal")?.classList.contains("open"))closeCal("txdate");},{passive:true});
 
 </script>
 </body>
