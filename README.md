@@ -72,6 +72,7 @@ Login → Dashboard → Add Transaction → View Report → Analytics → Export
 ## 👨‍💻 Author
 
 Mr. S. Alwyn Rajiv  
-Semiconductor Innovation Club  
+Assistant Professor / ECE
+Kamaraj College of ENgineering and Technology
 
-Version 2.1 Premium
+
