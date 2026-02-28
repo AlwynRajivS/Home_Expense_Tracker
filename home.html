@@ -33,7 +33,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 .tab-panel{display:none;}.tab-panel.active{display:block;animation:panelIn 0.22s ease;}
 @keyframes panelIn{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
 .sec-head{margin-bottom:20px;}.sec-head h2{font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700;color:var(--text);}.sec-head p{font-size:13px;color:var(--muted);margin-top:3px;}
-.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;transition:box-shadow 0.2s,transform 0.2s;}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;transition:box-shadow 0.2s;overflow:visible;}
 .stat-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px;display:flex;flex-direction:column;gap:10px;position:relative;overflow:hidden;transition:box-shadow 0.2s,transform 0.2s;}
 .stat-card:hover{transform:translateY(-2px);box-shadow:var(--shadow);}
 .stat-icon-wrap{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:18px;}
@@ -43,7 +43,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 .badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;}
 .badge-green{background:rgba(0,200,150,0.12);color:var(--success);}.badge-red{background:rgba(240,67,110,0.1);color:var(--danger);}.badge-blue{background:rgba(0,184,217,0.1);color:var(--accent3);}
 .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
-.date-field-wrap{position:relative;}
+.date-field-wrap{position:relative;overflow:visible;}
 .date-display{width:100%;padding:10px 14px;background:var(--bg3);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:13px;font-weight:600;font-family:'Plus Jakarta Sans',sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;transition:border-color 0.2s,box-shadow 0.2s;user-select:none;}
 .date-display:hover,.date-display.open{border-color:var(--accent);box-shadow:0 0 0 3px rgba(91,110,245,0.12);}
 .date-display .cal-icon{font-size:15px;flex-shrink:0;}.date-display .date-text{flex:1;}.date-display .arrow{color:var(--muted);font-size:11px;transition:transform 0.2s;}.date-display.open .arrow{transform:rotate(180deg);}
@@ -152,6 +152,11 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
 #analyticsKpis .mini-val{font-size:15px !important;line-height:1.3;}
 /* monthly breakdown table trend col */
 #monthlyBreakdownBody td{vertical-align:middle;}
+
+/* ── Analytics Enhancements ── */
+.cat-bar-wrap{display:flex;flex-direction:column;gap:10px;padding-top:4px;}
+#top5Wrap>div:hover{border-color:var(--border2)!important;transform:translateX(3px);transition:all 0.18s;}
+#catBarsWrap>div:hover>div:last-child>div{filter:brightness(1.15);}
 </style>
 </head>
 <body>
@@ -374,6 +379,34 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
     </div>
   </div>
 
+  <!-- Row 4: Weekday Pattern + Top Categories Bars -->
+  <div class="g2" style="margin-bottom:16px">
+    <div class="chart-card">
+      <h4>📆 Spending by Day of Week</h4>
+      <canvas id="weekdayChart"></canvas>
+    </div>
+    <div class="chart-card">
+      <h4>🏅 Category Expense Breakdown</h4>
+      <div id="catBarsWrap" style="display:flex;flex-direction:column;gap:10px;padding-top:4px">
+        <div style="color:var(--muted);font-size:12px">Load data from Overview tab first</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 5: Top Transactions + Monthly Avg Comparison -->
+  <div class="g2" style="margin-bottom:16px">
+    <div class="chart-card">
+      <h4>🔝 Top 5 Expenses</h4>
+      <div id="top5Wrap" style="display:flex;flex-direction:column;gap:8px;padding-top:4px">
+        <div style="color:var(--muted);font-size:12px">Load data from Overview tab first</div>
+      </div>
+    </div>
+    <div class="chart-card">
+      <h4>📊 Income vs Expense % Distribution</h4>
+      <canvas id="pieDistChart"></canvas>
+    </div>
+  </div>
+
   <!-- Smart Insights -->
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
     <h4 style="font-family:'Bricolage Grotesque',sans-serif;font-size:15px;font-weight:700;margin:0">💡 Smart Insights</h4>
@@ -492,9 +525,45 @@ const DAYS=["Su","Mo","Tu","We","Th","Fr","Sa"];
 
 function initCal(key,opts){const today=new Date();calState[key]={selectedDate:opts.initial||null,viewYear:opts.initial?opts.initial.getFullYear():today.getFullYear(),viewMonth:opts.initial?opts.initial.getMonth():today.getMonth(),mode:"day",onSelect:opts.onSelect};}
 
-function openCal(key){closeAllCals();const el=document.getElementById(key+"Cal");if(!el)return;if(el.classList.contains("open")){closeCal(key);return;}const disp=document.getElementById(key+"Display");if(disp)disp.classList.add("open");renderCal(key);el.classList.add("open");setTimeout(()=>{const h=(e)=>{const w=el.closest(".date-field-wrap");if(w&&!w.contains(e.target)){closeCal(key);document.removeEventListener("click",h);}};document.addEventListener("click",h);},10);}
+function openCal(key){
+  closeAllCals();
+  const el=document.getElementById(key+"Cal");
+  if(!el)return;
+  if(el.classList.contains("open")){closeCal(key);return;}
+  const disp=document.getElementById(key+"Display");
+  if(disp)disp.classList.add("open");
+  
+  // For transaction date inside card: use fixed positioning to escape stacking context
+  if(key==="txdate"&&disp){
+    const rect=disp.getBoundingClientRect();
+    el.style.position="fixed";
+    el.style.top=(rect.bottom+6)+"px";
+    el.style.left=rect.left+"px";
+    el.style.right="auto";
+    el.style.zIndex="9999";
+    el.style.width=Math.max(rect.width,288)+"px";
+    // Adjust if goes off screen right
+    if(rect.left+288>window.innerWidth){
+      el.style.left="auto";
+      el.style.right=(window.innerWidth-rect.right)+"px";
+    }
+  }
+  
+  renderCal(key);
+  el.classList.add("open");
+  setTimeout(()=>{
+    const h=(e)=>{
+      const w=el.closest(".date-field-wrap");
+      if(w&&!w.contains(e.target)&&!el.contains(e.target)){
+        closeCal(key);
+        document.removeEventListener("click",h);
+      }
+    };
+    document.addEventListener("click",h);
+  },10);
+}
 
-function closeCal(key){const el=document.getElementById(key+"Cal");const disp=document.getElementById(key+"Display");if(el)el.classList.remove("open");if(disp)disp.classList.remove("open");if(calState[key])calState[key].mode="day";}
+function closeCal(key){const el=document.getElementById(key+"Cal");const disp=document.getElementById(key+"Display");if(el){el.classList.remove("open");if(key==="txdate"){el.style.position="";el.style.top="";el.style.left="";el.style.right="";el.style.zIndex="";el.style.width="";}}if(disp)disp.classList.remove("open");if(calState[key])calState[key].mode="day";}
 function closeAllCals(){Object.keys(calState).forEach(k=>closeCal(k));}
 
 function renderCal(key){const el=document.getElementById(key+"Cal");if(!el||!calState[key])return;const s=calState[key];if(s.mode==="month"){renderMonthPicker(key,el);return;}if(s.mode==="year"){renderYearPicker(key,el);return;}const today=new Date();today.setHours(0,0,0,0);const firstDay=new Date(s.viewYear,s.viewMonth,1).getDay();const daysInMonth=new Date(s.viewYear,s.viewMonth+1,0).getDate();const daysInPrev=new Date(s.viewYear,s.viewMonth,0).getDate();let cells="";for(let i=firstDay-1;i>=0;i--)cells+=`<div class="cal-day other-month">${daysInPrev-i}</div>`;for(let d=1;d<=daysInMonth;d++){const dt=new Date(s.viewYear,s.viewMonth,d);const isToday=dt.getTime()===today.getTime();const isSel=s.selectedDate&&dt.getTime()===((()=>{const x=new Date(s.selectedDate);x.setHours(0,0,0,0);return x.getTime();})());cells+=`<div class="cal-day${isToday?" today":""}${isSel?" selected":""}" onclick="selectDay('${key}',${s.viewYear},${s.viewMonth},${d})">${d}</div>`;}const rem=(7-((firstDay+daysInMonth)%7))%7;for(let i=1;i<=rem;i++)cells+=`<div class="cal-day other-month">${i}</div>`;el.innerHTML=`<div class="cal-head"><div class="cal-nav" onclick="calNav('${key}',-1)">‹</div><div class="cal-title" onclick="calMode('${key}','month')">${MONTHS[s.viewMonth]} ${s.viewYear}</div><div class="cal-nav" onclick="calNav('${key}',1)">›</div></div><div class="cal-days-header">${DAYS.map(d=>`<div class="cal-day-name">${d}</div>`).join("")}</div><div class="cal-grid">${cells}</div><div class="cal-footer"><button class="cal-footer-btn today-btn" onclick="goToday('${key}')">Today</button><button class="cal-footer-btn clear-btn" onclick="clearDate('${key}')">Clear</button></div>`;}
@@ -507,23 +576,7 @@ function calBlockShift(key,dir){calState[key].viewYear+=dir;renderCal(key);}
 function calMode(key,mode){calState[key].mode=mode;renderCal(key);}
 function calPickMonth(key,m){calState[key].viewMonth=m;calState[key].mode="day";renderCal(key);}
 function calPickYear(key,y){calState[key].viewYear=y;calState[key].mode="month";renderCal(key);}
-function selectDay(key,y,m,d){
-  const dt = new Date(y, m, d);
-
-  calState[key].selectedDate = dt;
-  calState[key].viewYear = y;
-  calState[key].viewMonth = m;
-
-  if (calState[key].onSelect) {
-    calState[key].onSelect(dt);
-  }
-
-  // update display text immediately
-  const txt = document.getElementById(key + "Text");
-  if (txt) txt.textContent = displayDate(dt);
-
-  closeCal(key);
-}
+function selectDay(key,y,m,d){const dt=new Date(y,m,d);calState[key].selectedDate=dt;calState[key].onSelect(dt);closeCal(key);}
 function goToday(key){const t=new Date();calState[key].selectedDate=t;calState[key].viewYear=t.getFullYear();calState[key].viewMonth=t.getMonth();calState[key].onSelect(t);closeCal(key);}
 function clearDate(key){calState[key].selectedDate=null;calState[key].onSelect(null);closeCal(key);}
 function formatDate(d){if(!d)return"";return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;}
@@ -535,13 +588,8 @@ initCal("from",{initial:firstOfMonth,onSelect:(d)=>{document.getElementById("fro
 document.getElementById("fromText").textContent=displayDate(firstOfMonth);
 initCal("to",{initial:today,onSelect:(d)=>{document.getElementById("toText").textContent=displayDate(d);syncExportTo(d);}});
 document.getElementById("toText").textContent=displayDate(today);
-initCal("txdate",{
-  initial: today,
-  onSelect: (d) => {
-    calState["txdate"].selectedDate = d;
-    document.getElementById("txDateText").textContent = displayDate(d);
-  }
-});
+initCal("txdate",{initial:today,onSelect:(d)=>{document.getElementById("txDateText").textContent=displayDate(d);}});
+document.getElementById("txDateText").textContent=displayDate(today);
 initCal("expFrom",{initial:firstOfMonth,onSelect:(d)=>{document.getElementById("expFromText").textContent=displayDate(d);}});
 document.getElementById("expFromText").textContent=displayDate(firstOfMonth);
 initCal("expTo",{initial:today,onSelect:(d)=>{document.getElementById("expToText").textContent=displayDate(d);}});
@@ -557,7 +605,7 @@ function logic(){const t=document.getElementById("type").value;document.getEleme
 fetch(API+"?categories=1").then(r=>r.json()).then(d=>{const opts=d.categories.map(c=>`<option>${c}</option>`).join("");document.getElementById("cat").innerHTML=opts;document.getElementById("filterCat").innerHTML='<option value="">All Categories</option>'+opts;});
 
 let editingRow=null;
-function save(){const txDate = calState["txdate"]?.selectedDate;const amt=document.getElementById("amt").value;if(!txDate || !amt){showToast("❌ Date and amount are required","error");return;}const data={date:formatDate(txDate),user:session.name,type:document.getElementById("type").value,from:document.getElementById("fromAcc").value,to:document.getElementById("toAcc").value,category:document.getElementById("cat").value,amount:amt,mode:document.getElementById("fromAcc").value||document.getElementById("toAcc").value,notes:document.getElementById("note").value};const action=editingRow?"update":"save";if(editingRow)data.row=editingRow;fetch(API,{method:"POST",body:JSON.stringify({action,data})}).then(r=>r.json()).then(()=>{showToast(editingRow?"✅ Transaction updated":"✅ Transaction saved","success");resetForm();loadAll();}).catch(()=>showToast("❌ Save failed. Try again.","error"));}
+function save(){const txDate=calState["txdate"].selectedDate;const amt=document.getElementById("amt").value;if(!txDate||!amt){showToast("❌ Date and amount are required","error");return;}const data={date:formatDate(txDate),user:session.name,type:document.getElementById("type").value,from:document.getElementById("fromAcc").value,to:document.getElementById("toAcc").value,category:document.getElementById("cat").value,amount:amt,mode:document.getElementById("fromAcc").value||document.getElementById("toAcc").value,notes:document.getElementById("note").value};const action=editingRow?"update":"save";if(editingRow)data.row=editingRow;fetch(API,{method:"POST",body:JSON.stringify({action,data})}).then(r=>r.json()).then(()=>{showToast(editingRow?"✅ Transaction updated":"✅ Transaction saved","success");resetForm();loadAll();}).catch(()=>showToast("❌ Save failed. Try again.","error"));}
 function resetForm(){document.getElementById("amt").value="";document.getElementById("note").value="";editingRow=null;document.getElementById("formTitle").textContent="Add Transaction";document.getElementById("formSub").textContent="Fill in the form to record a new entry";document.getElementById("cancelBtn").classList.add("hidden");}
 function cancelEdit(){resetForm();}
 function editTx(row,rowData){editingRow=row;document.getElementById("formTitle").textContent="Edit Transaction";document.getElementById("formSub").textContent="Update and save below";document.getElementById("cancelBtn").classList.remove("hidden");const d=new Date(rowData[0]);calState["txdate"].selectedDate=d;calState["txdate"].viewYear=d.getFullYear();calState["txdate"].viewMonth=d.getMonth();document.getElementById("txDateText").textContent=displayDate(d);document.getElementById("type").value=rowData[2];document.getElementById("fromAcc").value=rowData[3]||"Cash";document.getElementById("toAcc").value=rowData[4]||"Cash";document.getElementById("cat").value=rowData[5]||"";document.getElementById("amt").value=rowData[6];document.getElementById("note").value=rowData[8]||"";logic();switchTab(document.querySelector(".tab-btn:nth-child(2)"),"add");showToast("📝 Edit mode","success");}
@@ -638,6 +686,8 @@ function loadTable(){
       }
     });
     _cb._txReady=true;_renderClosingBalance();
+    // Refresh analytics charts that depend on allTransactions if analytics tab is active
+    if(document.getElementById("tab-analytics").classList.contains("active")){buildAnalytics();}
   });
 }
 
@@ -831,6 +881,85 @@ function buildAnalytics(){
       </tr>`;
     });
     document.getElementById("monthlyBreakdownBody").innerHTML=tableHTML||`<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--muted)">No data</td></tr>`;
+
+    // ── 8. Weekday Spending Pattern ──
+    // Use allTransactions to build weekday expense totals
+    const weekdayExp=[0,0,0,0,0,0,0]; // Sun-Sat
+    const weekdayInc=[0,0,0,0,0,0,0];
+    allTransactions.forEach(r=>{
+      const dt=new Date(r[0]);
+      const dow=dt.getDay();
+      const amt=parseFloat(r[6]||0);
+      if(r[2]==="Expense")weekdayExp[dow]+=amt;
+      if(r[2]==="Income")weekdayInc[dow]+=amt;
+    });
+    const dowLabels=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+    if(chartObjs.weekday)chartObjs.weekday.destroy();
+    chartObjs.weekday=new Chart(document.getElementById("weekdayChart"),{
+      type:"bar",
+      data:{labels:dowLabels,datasets:[
+        {label:"Expenses",data:weekdayExp.map(v=>Math.round(v)),backgroundColor:["rgba(240,67,110,0.55)","rgba(240,67,110,0.7)","rgba(240,67,110,0.7)","rgba(240,67,110,0.7)","rgba(240,67,110,0.7)","rgba(91,110,245,0.7)","rgba(91,110,245,0.55)"],borderRadius:6,borderSkipped:false},
+        {label:"Income",data:weekdayInc.map(v=>Math.round(v)),backgroundColor:"rgba(0,200,150,0.5)",borderRadius:6,borderSkipped:false}
+      ]},
+      options:{responsive:true,maintainAspectRatio:true,interaction:{mode:"index",intersect:false},
+        scales:{...scaleOpts,y:{...scaleOpts.y,ticks:{...scaleOpts.y.ticks,callback:v=>"₹"+Math.round(v/1000)+"k"}}},
+        plugins:{legend:legendOpts,tooltip:{callbacks:{title:t=>"Day: "+t[0].label}}}}
+    });
+
+    // ── 9. Category Expense Progress Bars ──
+    const catMap2={};
+    let catTotal=0;
+    allTransactions.forEach(r=>{if(r[2]==="Expense"&&r[5]){const a=parseFloat(r[6]||0);catMap2[r[5]]=(catMap2[r[5]]||0)+a;catTotal+=a;}});
+    const catColors=["#5b6ef5","#f0436e","#00b8d9","#00c896","#f59e0b","#a78bfa","#34d399","#fb923c"];
+    const sortedCats=Object.entries(catMap2).sort((a,b)=>b[1]-a[1]).slice(0,8);
+    const maxCat=sortedCats.length?sortedCats[0][1]:1;
+    document.getElementById("catBarsWrap").innerHTML=sortedCats.length?sortedCats.map(([cat,val],i)=>{
+      const pct=Math.round((val/maxCat)*100);
+      const share=catTotal>0?Math.round((val/catTotal)*100):0;
+      const col=catColors[i%catColors.length];
+      return `<div style="display:flex;flex-direction:column;gap:4px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:12px;font-weight:700;color:var(--text)">${cat}</span>
+          <span style="font-size:11px;color:var(--muted);font-weight:600">₹${Math.round(val).toLocaleString("en-IN")} &nbsp;·&nbsp; <span style="color:${col};font-weight:700">${share}%</span></span>
+        </div>
+        <div style="height:8px;background:var(--bg3);border-radius:8px;overflow:hidden">
+          <div style="height:100%;width:${pct}%;background:${col};border-radius:8px;transition:width 0.8s ease"></div>
+        </div>
+      </div>`;
+    }).join(""):`<div style="color:var(--muted);font-size:12px">No expense categories found</div>`;
+
+    // ── 10. Top 5 Individual Expense Transactions ──
+    const top5=allTransactions.filter(r=>r[2]==="Expense").sort((a,b)=>parseFloat(b[6])-parseFloat(a[6])).slice(0,5);
+    document.getElementById("top5Wrap").innerHTML=top5.length?top5.map((r,i)=>{
+      const icons=["🥇","🥈","🥉","4️⃣","5️⃣"];
+      return `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg3);border-radius:10px;border:1px solid var(--border)">
+        <span style="font-size:18px">${icons[i]}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r[5]||r[2]}${r[8]?" · "+r[8]:""}</div>
+          <div style="font-size:10px;color:var(--muted)">${r[0].split("T")[0]} · ${r[3]||"—"}</div>
+        </div>
+        <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:15px;font-weight:800;color:var(--danger);flex-shrink:0">₹${parseFloat(r[6]).toLocaleString("en-IN")}</div>
+      </div>`;
+    }).join(""):`<div style="color:var(--muted);font-size:12px;padding:10px">No expense transactions loaded. Load data from Overview tab.</div>`;
+
+    // ── 11. Pie Distribution: Total Inc vs Total Exp ──
+    if(chartObjs.pieDist)chartObjs.pieDist.destroy();
+    const totalAllInc=labels.reduce((s,k)=>s+(d[k].inc||0),0);
+    const totalAllExp=labels.reduce((s,k)=>s+(d[k].exp||0),0);
+    const totalAllSav=Math.max(0,totalAllInc-totalAllExp);
+    chartObjs.pieDist=new Chart(document.getElementById("pieDistChart"),{
+      type:"doughnut",
+      data:{labels:["Savings/Net","Total Expenses"],datasets:[{
+        data:[Math.round(totalAllSav),Math.round(totalAllExp)],
+        backgroundColor:["rgba(0,200,150,0.8)","rgba(240,67,110,0.8)"],
+        borderWidth:0,hoverOffset:8
+      }]},
+      options:{responsive:true,maintainAspectRatio:true,cutout:"55%",
+        plugins:{legend:{position:"bottom",labels:{color:mutedColor,font:{family:fontFam},padding:12}},
+          tooltip:{callbacks:{label:ctx=>{const v=ctx.parsed;const tot=totalAllInc||1;return` ₹${Math.round(v).toLocaleString("en-IN")} (${Math.round(v/tot*100)}% of income)`;}}}}
+      }
+    });
+
   });
 }
 function downloadPDF(){const f=formatDate(calState["expFrom"].selectedDate)||getFrom();const t=formatDate(calState["expTo"].selectedDate)||getTo();if(!f||!t){showToast("❌ Select date range","error");return;}showToast("⏳ Generating PDF…");fetch(`${API}?pdf=1&from=${f}&to=${t}`).then(r=>r.json()).then(d=>window.open(d.url));}
@@ -842,6 +971,8 @@ logic();
 fetch(API+"?balances=1").then(r=>r.json()).then(b=>{document.getElementById("liveBalances").innerHTML=`<div class="trow"><span class="trow-label">Cash</span><span style="font-weight:700;color:var(--text)">₹${b.cash||0}</span></div><div class="trow"><span class="trow-label">Bank</span><span style="font-weight:700;color:var(--text)">₹${b.bank||0}</span></div><div class="trow" style="border:none"><span class="trow-label">Total</span><span style="font-weight:800;color:var(--accent3);font-family:'Bricolage Grotesque',sans-serif">₹${(parseInt(b.cash||0)+parseInt(b.bank||0))}</span></div>`;}).catch(()=>{});
 loadAll();
 document.addEventListener("keydown",e=>{if(e.key==="Escape")closeAllCals();});
+window.addEventListener("scroll",()=>{if(document.getElementById("txDateCal")?.classList.contains("open"))closeCal("txdate");},{passive:true});
+window.addEventListener("resize",()=>{if(document.getElementById("txDateCal")?.classList.contains("open"))closeCal("txdate");},{passive:true});
 
 </script>
 </body>
